@@ -1,0 +1,56 @@
+# Environment variables and secrets
+.env
+*.env
+.env.local
+.env.production
+
+# Sensitive configuration
+config.json
+
+# Log files
+*.log
+*.json
+trading_bot_cron.log
+trading_bot.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local environment
+.env.local
+.env.dev
+.env.test
