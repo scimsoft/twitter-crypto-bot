@@ -465,7 +465,7 @@ class EnhancedTradingBot:
             try:
                 self.run_single_cycle()
                 logger.info(f"Waiting {interval_minutes} minutes until next cycle...")
-                sleep_minutes = self.check_interval_minutes if hasattr(self, "check_interval_minutes") else 15  # default to 15 minutes if not set
+                sleep_minutes = interval_minutes if interval_minutes is not None else self.check_interval_minutes
                 time.sleep(sleep_minutes * 60)
             except KeyboardInterrupt:
                 logger.info("Bot stopped by user")
@@ -488,12 +488,14 @@ def main():
         
         # Run a single cycle for testing
         bot.run_single_cycle()
-        
+
         # Run with configurable interval from config file
-        bot.run_continuous()
+        bot.run_continuous()            # Run with configurable interval from config file
+    bot.run_continuous()
         
     except Exception as e:
         logger.error(f"Error running Enhanced Trading Bot: {str(e)}")
+
 
 if __name__ == "__main__":
     main()
