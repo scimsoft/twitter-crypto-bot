@@ -32,6 +32,16 @@ To run the monitor:
 python monitor_trades.py
 ```
 
+## Running the Bot
+
+The bot is configured to run via the `run_twitter_bot.sh` script, which now uses the news-based sentiment analyzer:
+
+```bash
+./run_twitter_bot.sh
+```
+
+This will start the news-based trading bot that analyzes world news, US news, and conflict reports every 15 minutes.
+
 ## Prerequisites
 
 - Python 3.7+
