@@ -17,6 +17,20 @@ This bot monitors Twitter accounts of crypto influencers and analyzes the sentim
 - Risk management with stop-loss and take-profit levels
 - Historical trade tracking and analysis
 - Dynamic adjustment of trading thresholds based on market conditions
+- Trade monitoring and notification system
+
+## Trade Monitoring
+
+The bot includes a monitoring system to track and notify you about trades:
+
+- `monitor_trades.py` - Monitors for new trades and sends updates
+- Automatic alerts when trades are executed
+- Periodic status updates of your portfolio
+
+To run the monitor:
+```bash
+python monitor_trades.py
+```
 
 ## Prerequisites
 
@@ -69,11 +83,14 @@ Or set up a cron job to run it hourly:
 ## Files
 
 - `crypto_trading_bot.py` - Main trading bot logic
+- `enhanced_trading_bot.py` - Enhanced bot with all new features
 - `twitter_sentiment_analyzer.py` - Sentiment analysis functions
 - `simple_twitter_collector.py` - Twitter data collection
 - `reuters_sentiment_tracker.py` - Reuters sentiment tracking
 - `set_twitter_credentials.sh` - Script to set up credentials
 - `run_twitter_bot.sh` - Wrapper script for cron jobs
+- `monitor_trades.py` - Trade monitoring and notification system
+- `interface.html` - Web-based visual interface
 
 ## Security
 
