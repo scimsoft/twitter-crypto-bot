@@ -42,30 +42,29 @@ class NewsBasedTradingBot:
         
         # World news RSS feeds (focusing on global events, conflicts, and politics)
         self.world_news_feeds = [
-            'https://feeds.reuters.com/Reuters/worldNews',
-            'https://rss.cnn.com/rss/edition.rss',
             'https://feeds.bbci.co.uk/news/world/rss.xml',
             'https://www.aljazeera.com/xml/rss/all.xml',
             'https://rss.dw.com/xml/rss-en-all',
             'https://www.france24.com/en/rss',
-            'https://feeds.apnews.com/apnews.xml',
-            'https://rss.nytimes.com/services/xml/rss/nyt/World.xml'
+            'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
+            'https://www.hongkongfp.com/feed/',
+            'https://www.tabnak.ir/fa/rss/allnews',
+            'https://lenta.ru/rss/',
+            'https://www.rt.com/rss/',
+            'https://www.ft.com/world?format=rss',
+            'https://timesofindia.indiatimes.com/rssfeeds/296589292.cms',
+            'https://www.financialsamurai.com/feed/'
         ]
         
         # US news RSS feeds
         self.us_news_feeds = [
-            'https://feeds.reuters.com/Reuters/domesticNews',
-            'https://rss.cnn.com/rss/edition_us.rss',
-            'https://feeds.bbci.co.uk/news/us_and_canada/rss.xml',
             'https://rss.nytimes.com/services/xml/rss/nyt/US.xml',
-            'https://www.washingtonpost.com/rss-national.xml',
             'https://abcnews.go.com/abcnews/usheadlines'
         ]
         
         # Conflict/Wars focused feeds
         self.conflict_feeds = [
             'https://www.defensenews.com/arc/outboundfeeds/rss/category/global-navy-news/?outputType=xml',
-            'https://foreignpolicy.com/feed/',
             'https://www.euronews.com/rss',
             'https://www.theguardian.com/world/rss'
         ]
