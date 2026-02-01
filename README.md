@@ -82,9 +82,10 @@ Or set up a cron job to run it hourly:
 
 ## Files
 
-- `crypto_trading_bot.py` - Main trading bot logic
+- `crypto_trading_bot.py` - Original trading bot logic
 - `enhanced_trading_bot.py` - Enhanced bot with all new features
-- `twitter_sentiment_analyzer.py` - Sentiment analysis functions
+- `news_sentiment_trading_bot.py` - NEW: News-based trading bot using financial news feeds for sentiment analysis
+- `twitter_sentiment_analyzer.py` - Twitter-based sentiment analysis functions
 - `simple_twitter_collector.py` - Twitter data collection
 - `reuters_sentiment_tracker.py` - Reuters sentiment tracking
 - `set_twitter_credentials.sh` - Script to set up credentials
