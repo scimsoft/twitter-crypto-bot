@@ -40,16 +40,40 @@ class NewsBasedTradingBot:
         self.stop_loss_pct = 0.05  # 5% stop loss
         self.take_profit_pct = 0.15  # 15% take profit
         
-        # Financial news RSS feeds
-        self.news_feeds = [
-            'https://feeds.reuters.com/reuters/marketsnews/rss.xml',
-            'https://feeds.reuters.com/reuters/topNews/rss.xml',
-            'https://www.cnbc.com/id/100727362/device/rss/rss.xml',
-            'https://www.bloomberg.com/markets/feed',
-            'https://rss.cnn.com/rss/money_news_international.rss'
+        # World news RSS feeds (focusing on global events, conflicts, and politics)
+        self.world_news_feeds = [
+            'https://feeds.reuters.com/Reuters/worldNews',
+            'https://rss.cnn.com/rss/edition.rss',
+            'https://feeds.bbci.co.uk/news/world/rss.xml',
+            'https://www.aljazeera.com/xml/rss/all.xml',
+            'https://rss.dw.com/xml/rss-en-all',
+            'https://www.france24.com/en/rss',
+            'https://www.npr.org/sections/news/latest/rss.xml',
+            'https://feeds.apnews.com/apnews.xml',
+            'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
+            'https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml'
         ]
         
-        # Crypto-specific news sources
+        # US news RSS feeds
+        self.us_news_feeds = [
+            'https://feeds.reuters.com/Reuters/domesticNews',
+            'https://rss.cnn.com/rss/edition_us.rss',
+            'https://feeds.bbci.co.uk/news/us_and_canada/rss.xml',
+            'https://rss.nytimes.com/services/xml/rss/nyt/US.xml',
+            'https://www.washingtonpost.com/rss-national.xml',
+            'https://abcnews.go.com/abcnews/usheadlines',
+            'https://www.nbcnews.com/feed'
+        ]
+        
+        # Conflict/Wars focused feeds
+        self.conflict_feeds = [
+            'https://www.defensenews.com/arc/outboundfeeds/rss/category/global-navy-news/?outputType=xml',
+            'https://foreignpolicy.com/feed/',
+            'https://www.euronews.com/rss',
+            'https://www.theguardian.com/world/rss'
+        ]
+        
+        # Crypto-specific news sources (still relevant for market impact)
         self.crypto_news_feeds = [
             'https://cointelegraph.com/rss',
             'https://crypto.news/feed/',
@@ -107,10 +131,10 @@ class NewsBasedTradingBot:
 
     def analyze_news_sentiment(self):
         """
-        Analyze sentiment from financial news feeds
+        Analyze sentiment from world news, US news, and conflict feeds
         """
-        # Combine crypto-specific and general financial feeds
-        all_feeds = self.crypto_news_feeds + self.news_feeds
+        # Combine all types of news feeds: world news, US news, conflicts, and crypto-specific
+        all_feeds = self.world_news_feeds + self.us_news_feeds + self.conflict_feeds + self.crypto_news_feeds
         
         total_sentiment = 0
         article_count = 0
