@@ -1,18 +1,22 @@
-# Twitter Crypto Trading Bot
+# Enhanced Crypto Trading Bot
 
-An automated crypto trading bot that analyzes Twitter sentiment to make trading decisions.
+An advanced automated crypto trading bot that analyzes Twitter sentiment to make trading decisions with real-time price tracking, profit calculation, and strategy optimization.
 
 ## Overview
 
-This bot monitors Twitter accounts of crypto influencers and analyzes the sentiment of their tweets to make informed trading decisions. It runs hourly and tracks sentiment trends across major crypto personalities.
+This bot monitors Twitter accounts of crypto influencers and analyzes the sentiment of their tweets to make informed trading decisions. It includes real-time price tracking, profit/loss calculation, strategy optimization, and a visual interface. The bot starts with $10,000 in initial capital and trades based on sentiment strength.
 
-## Features
+## Enhanced Features
 
-- Hourly sentiment analysis of crypto influencer tweets
-- Automated trading signal generation based on sentiment
-- Integration with Twitter API for real-time data
-- Configurable trading parameters
-- Detailed logging and analytics
+- Real-time cryptocurrency price tracking (via CoinGecko API)
+- Portfolio value calculation (cash + holdings * current price)
+- Profit and loss tracking with percentage gains
+- Trading strategy optimization based on performance
+- Visual interface to monitor trading activities
+- Support for multiple cryptocurrencies (default: DOGE)
+- Risk management with stop-loss and take-profit levels
+- Historical trade tracking and analysis
+- Dynamic adjustment of trading thresholds based on market conditions
 
 ## Prerequisites
 
