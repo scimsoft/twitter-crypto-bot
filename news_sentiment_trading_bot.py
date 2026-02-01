@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 News-Based Crypto Trading Bot
-Uses financial news feeds for sentiment analysis instead of Twitter
+Uses world news feeds for sentiment analysis instead of Twitter
 """
 
 import requests
@@ -48,10 +48,8 @@ class NewsBasedTradingBot:
             'https://www.aljazeera.com/xml/rss/all.xml',
             'https://rss.dw.com/xml/rss-en-all',
             'https://www.france24.com/en/rss',
-            'https://www.npr.org/sections/news/latest/rss.xml',
             'https://feeds.apnews.com/apnews.xml',
-            'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
-            'https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml'
+            'https://rss.nytimes.com/services/xml/rss/nyt/World.xml'
         ]
         
         # US news RSS feeds
@@ -61,8 +59,7 @@ class NewsBasedTradingBot:
             'https://feeds.bbci.co.uk/news/us_and_canada/rss.xml',
             'https://rss.nytimes.com/services/xml/rss/nyt/US.xml',
             'https://www.washingtonpost.com/rss-national.xml',
-            'https://abcnews.go.com/abcnews/usheadlines',
-            'https://www.nbcnews.com/feed'
+            'https://abcnews.go.com/abcnews/usheadlines'
         ]
         
         # Conflict/Wars focused feeds
@@ -73,14 +70,9 @@ class NewsBasedTradingBot:
             'https://www.theguardian.com/world/rss'
         ]
         
-        # Crypto-specific news sources (still relevant for market impact)
-        self.crypto_news_feeds = [
-            'https://cointelegraph.com/rss',
-            'https://crypto.news/feed/',
-            'https://www.coindesk.com/feed/',
-            'https://decrypt.co/feed'
-        ]
-        
+        # Crypto-specific news sources (removed - not relevant to world events)
+        self.crypto_news_feeds = []
+
         logger.info(f"News-Based Trading Bot initialized with ${initial_capital} in {coin_symbol}")
 
     def get_current_price(self):
@@ -184,8 +176,8 @@ class NewsBasedTradingBot:
         """
         Analyze sentiment from world news, US news, and conflict feeds
         """
-        # Combine all types of news feeds: world news, US news, conflicts, and crypto-specific
-        all_feeds = self.world_news_feeds + self.us_news_feeds + self.conflict_feeds + self.crypto_news_feeds
+        # Combine all types of news feeds: world news, US news, and conflicts
+        all_feeds = self.world_news_feeds + self.us_news_feeds + self.conflict_feeds
         
         total_sentiment = 0
         article_count = 0
@@ -534,14 +526,14 @@ def main():
         bot = NewsBasedTradingBot(initial_capital=10000, coin_symbol="DOGE")
         
         print("News-Based Crypto Trading Bot is starting...")
-        print("This bot uses financial news feeds for sentiment analysis instead of Twitter.")
+        print("This bot uses world news feeds for sentiment analysis instead of Twitter.")
         print("Press Ctrl+C to stop the bot")
         
         # Run a single cycle for testing
         bot.run_single_cycle()
         
-        # Uncomment the line below to run continuously
-        # bot.run_continuous(interval_minutes=15)  # Run every 15 minutes
+        # Run continuously with 15-minute intervals
+        bot.run_continuous(interval_minutes=15)  # Run every 15 minutes
         
     except Exception as e:
         logger.error(f"Error running News-Based Trading Bot: {str(e)}")
