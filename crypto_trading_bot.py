@@ -14,9 +14,10 @@ import logging
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
-load_dotenv('/home/gerrit/.openclaw/workspace/.env')
+load_dotenv('/home/gerrit/.openclaw/workspace/twitter-crypto-bot/.env')
 
 # Add the workspace directory to the Python path
+sys.path.insert(0, '/home/gerrit/.openclaw/workspace/twitter-crypto-bot')
 sys.path.insert(0, '/home/gerrit/.openclaw/workspace')
 
 try:
@@ -227,11 +228,20 @@ def main():
         print("Please ensure all files are in the workspace and dependencies are installed.")
         return
     
-    # Check if Twitter credentials are set
-    bearer_token = os.getenv('TWITTER_BEARER_TOKEN')
-    if not bearer_token:
-        print("TWITTER_BEARER_TOKEN environment variable not set!")
-        print("Please set your Twitter API credentials before running this bot.")
+    # Check if Twitter credentials are set (will generate Bearer Token from API Key/Secret if needed)
+    try:
+        from twitter_config import get_bearer_token
+        bearer_token = get_bearer_token()
+        if not bearer_token:
+            print("Error: Unable to get Twitter Bearer Token.")
+            print("Please ensure either:")
+            print("1. TWITTER_BEARER_TOKEN is set in .env, OR")
+            print("2. TWITTER_API_KEY and TWITTER_API_SECRET are set in .env")
+    except ImportError:
+        bearer_token = os.getenv('TWITTER_BEARER_TOKEN')
+        if not bearer_token:
+            print("TWITTER_BEARER_TOKEN environment variable not set!")
+            print("Please set your Twitter API credentials before running this bot.")
         return
     
     # Initialize the bot

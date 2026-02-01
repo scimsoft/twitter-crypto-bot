@@ -7,8 +7,13 @@ This script connects to Twitter API and collects tweets from specified accounts
 import tweepy
 import json
 import os
+import sys
 from datetime import datetime
 import logging
+
+# Add parent directory to path to import twitter_config
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from twitter_config import get_bearer_token
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,27 +23,54 @@ class TwitterSentimentCollector:
     def __init__(self, bearer_token=None, api_key=None, api_secret=None, access_token=None, access_token_secret=None):
         """
         Initialize the Twitter API client
+        
+        Args:
+            bearer_token: Optional Bearer Token. If not provided, will be generated from API Key/Secret
+            api_key: Optional API Key (used to generate Bearer Token if bearer_token not provided)
+            api_secret: Optional API Secret (used to generate Bearer Token if bearer_token not provided)
+            access_token: Optional Access Token (for OAuth 1.0a User Context - not currently used)
+            access_token_secret: Optional Access Token Secret (for OAuth 1.0a User Context - not currently used)
         """
         try:
-            # Option 1: Using Bearer Token (recommended for read-only access)
+            # Get Bearer Token - use provided one, or get from config (which will generate if needed)
             if bearer_token:
-                self.client = tweepy.Client(bearer_token=bearer_token)
-            # Option 2: Using OAuth 1.0a User Context (for additional capabilities)
-            elif all([api_key, api_secret, access_token, access_token_secret]):
-                auth = tweepy.OAuth1UserHandler(
-                    api_key, api_secret, access_token, access_token_secret
-                )
-                self.client = tweepy.Client(
-                    bearer_token=bearer_token,
-                    consumer_key=api_key,
-                    consumer_secret=api_secret,
-                    access_token=access_token,
-                    access_token_secret=access_token_secret
-                )
+                token_to_use = bearer_token
+            elif api_key and api_secret:
+                # Generate Bearer Token from provided API Key/Secret directly
+                import base64
+                import urllib.request
+                import urllib.parse
+                from urllib.error import HTTPError
+                
+                credentials = f"{api_key}:{api_secret}"
+                encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+                
+                url = "https://api.twitter.com/oauth2/token"
+                data = urllib.parse.urlencode({'grant_type': 'client_credentials'}).encode('utf-8')
+                headers = {
+                    'Authorization': f'Basic {encoded_credentials}',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                }
+                
+                try:
+                    req = urllib.request.Request(url, data=data, headers=headers)
+                    response = urllib.request.urlopen(req, timeout=10)
+                    response_data = json.loads(response.read().decode('utf-8'))
+                    token_to_use = response_data.get('access_token')
+                except Exception as e:
+                    logger.warning(f"Failed to generate Bearer Token from provided credentials: {e}")
+                    token_to_use = None
             else:
-                raise ValueError("Either bearer_token or all four OAuth credentials must be provided")
+                # Try to get Bearer Token from config (will generate if needed)
+                token_to_use = get_bearer_token()
             
-            logger.info("Successfully initialized Twitter API client")
+            if not token_to_use:
+                raise ValueError("Unable to get Bearer Token. Please provide bearer_token or api_key/api_secret.")
+            
+            # Use Bearer Token authentication (recommended for read-only access)
+            self.client = tweepy.Client(bearer_token=token_to_use)
+            
+            logger.info("Successfully initialized Twitter API client with Bearer Token")
         
         except Exception as e:
             logger.error(f"Failed to initialize Twitter API client: {str(e)}")
@@ -122,16 +154,14 @@ def main():
     """
     Main function to demonstrate usage
     """
-    # Load API credentials from environment variables (recommended)
-    bearer_token = os.getenv('TWITTER_BEARER_TOKEN')
-    
-    # If you don't have credentials in environment variables, you can hardcode them temporarily
-    # but remember to remove them for security reasons
-    # bearer_token = "your_bearer_token_here"
+    # Get Bearer Token (will be generated from API Key/Secret if needed)
+    bearer_token = get_bearer_token()
     
     if not bearer_token:
-        print("Error: Please set TWITTER_BEARER_TOKEN environment variable")
-        print("You can get this from your Twitter Developer account")
+        print("Error: Unable to get Bearer Token.")
+        print("Please ensure either:")
+        print("1. TWITTER_BEARER_TOKEN is set in .env, OR")
+        print("2. TWITTER_API_KEY and TWITTER_API_SECRET are set in .env")
         return
     
     # Initialize the collector

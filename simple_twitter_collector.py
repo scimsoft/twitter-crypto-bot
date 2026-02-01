@@ -16,11 +16,12 @@ import os
 # Load environment variables from .env file
 from dotenv import load_dotenv
 from urllib.parse import unquote
-load_dotenv('/home/gerrit/.openclaw/workspace/.env')
+import sys
+import os
 
-# Get and decode the bearer token
-BEARER_TOKEN_RAW = os.getenv('TWITTER_BEARER_TOKEN')
-BEARER_TOKEN = unquote(BEARER_TOKEN_RAW) if BEARER_TOKEN_RAW else None
+# Add parent directory to path to import twitter_config
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from twitter_config import get_bearer_token
 
 class SimpleTwitterCollector:
     """
@@ -33,44 +34,34 @@ class SimpleTwitterCollector:
         # Twitter API base URL
         self.base_url = "https://api.twitter.com/2"
         
-        # Get API credentials from environment variables
-        bearer_token_raw = os.getenv('TWITTER_BEARER_TOKEN')
-        self.bearer_token = unquote(bearer_token_raw) if bearer_token_raw else None
+        # Get Bearer Token (will generate from API Key/Secret if needed)
+        self.bearer_token = get_bearer_token()
         
         if not self.bearer_token:
-            print("Warning: TWITTER_BEARER_TOKEN environment variable not set.")
-            print("You need to set this to access Twitter API")
+            print("Error: Unable to get Bearer Token.")
+            print("Please ensure either:")
+            print("1. TWITTER_BEARER_TOKEN is set in .env, OR")
+            print("2. TWITTER_API_KEY and TWITTER_API_SECRET are set in .env")
+            raise ValueError("No valid Twitter authentication credentials found")
     
     def _make_request(self, endpoint, params=None):
         """
         Make an authenticated request to Twitter API
         """
-        # Prioritize bearer token authentication (app-only)
-        if self.bearer_token and len(self.bearer_token) > 50:  # Valid bearer tokens are typically long
-            url = f"{self.base_url}{endpoint}"
-            if params:
-                url += "?" + urllib.parse.urlencode(params)
-            
-            headers = {
-                'Authorization': f'Bearer {self.bearer_token}',
-                'Content-Type': 'application/json'
-            }
-            
-            req = urllib.request.Request(url, headers=headers)
-        else:
-            # Fallback to OAuth 1.0a authentication if we have the necessary credentials
-            api_key = os.getenv('TWITTER_API_KEY')
-            api_secret = os.getenv('TWITTER_API_SECRET')
-            access_token = os.getenv('TWITTER_ACCESS_TOKEN')
-            access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-            
-            if api_key and api_secret and access_token and access_token_secret:
-                # For OAuth 1.0a, we'd need to use a library like requests_oauthlib
-                # Since we're using standard libraries only, we'll prioritize bearer token
-                print("Note: Bearer token not valid, but OAuth credentials are available")
-                raise Exception("OAuth 1.0a requires additional libraries. Please provide a valid Bearer Token.")
-            else:
-                raise Exception("No valid authentication method available")
+        # Use Bearer Token authentication (OAuth 2.0 Application-Only)
+        if not self.bearer_token:
+            raise Exception("No Bearer Token available. Cannot authenticate with Twitter API.")
+        
+        url = f"{self.base_url}{endpoint}"
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        
+        headers = {
+            'Authorization': f'Bearer {self.bearer_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        req = urllib.request.Request(url, headers=headers)
         
         try:
             response = urllib.request.urlopen(req)

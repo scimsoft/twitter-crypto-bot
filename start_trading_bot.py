@@ -29,11 +29,22 @@ def check_environment():
             print(f"  - {file}")
         return False
     
-    # Check for required environment variables
-    if not os.getenv('TWITTER_BEARER_TOKEN'):
-        print("TWITTER_BEARER_TOKEN environment variable not set")
-        print("Please set your Twitter API credentials")
-        return False
+    # Check for required environment variables (will generate Bearer Token from API Key/Secret if needed)
+    try:
+        sys.path.insert(0, '/home/gerrit/.openclaw/workspace/twitter-crypto-bot')
+        from twitter_config import get_bearer_token
+        bearer_token = get_bearer_token()
+        if not bearer_token:
+            print("Error: Unable to get Twitter Bearer Token.")
+            print("Please ensure either:")
+            print("1. TWITTER_BEARER_TOKEN is set in .env, OR")
+            print("2. TWITTER_API_KEY and TWITTER_API_SECRET are set in .env")
+            return False
+    except ImportError:
+        if not os.getenv('TWITTER_BEARER_TOKEN'):
+            print("TWITTER_BEARER_TOKEN environment variable not set")
+            print("Please set your Twitter API credentials")
+            return False
     
     return True
 
