@@ -85,37 +85,88 @@ class NewsBasedTradingBot:
 
     def get_current_price(self):
         """
-        Get current price of the cryptocurrency from CoinGecko API
+        Get current price of the cryptocurrency from multiple free APIs to avoid rate limits
         """
-        try:
-            url = f"https://api.coingecko.com/api/v3/simple/price"
-            params = {
-                'ids': self.coin_symbol.lower(),
-                'vs_currencies': 'usd'
-            }
-            
-            response = requests.get(url, params=params)
-            if response.status_code == 200:
-                data = response.json()
-                if self.coin_symbol.lower() in data:
-                    price = data[self.coin_symbol.lower()]['usd']
+        # List of free APIs to try in order
+        apis_to_try = [
+            self._get_price_coingecko,
+            self._get_price_coinpaprika,
+            self._get_price_crypto_compare,
+            self._get_price_binance
+        ]
+        
+        for api_func in apis_to_try:
+            try:
+                price = api_func()
+                if price and price > 0:
                     self.price_history.append({
                         'price': price,
                         'timestamp': datetime.now().isoformat()
                     })
                     return price
-                else:
-                    logger.warning(f"Coin {self.coin_symbol} not found in CoinGecko")
-                    # Default to $0.10 for DOGE if API fails
-                    return 0.10
-            else:
-                logger.error(f"Failed to get price from CoinGecko: {response.status_code}")
-                # Default to $0.10 for DOGE if API fails
-                return 0.10
-        except Exception as e:
-            logger.error(f"Error getting current price: {str(e)}")
-            # Default to $0.10 for DOGE if API fails
-            return 0.10
+            except Exception as e:
+                logger.debug(f"Error using {api_func.__name__}: {str(e)}")
+                continue
+        
+        # If all APIs fail, return a default price for DOGE
+        logger.warning("All price APIs failed, using default price")
+        return 0.10
+
+    def _get_price_coingecko(self):
+        """Get price from CoinGecko API"""
+        url = f"https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            'ids': self.coin_symbol.lower(),
+            'vs_currencies': 'usd'
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if self.coin_symbol.lower() in data:
+                return data[self.coin_symbol.lower()]['usd']
+        elif response.status_code == 429:
+            raise Exception("CoinGecko rate limit exceeded")
+        else:
+            raise Exception(f"CoinGecko returned status code {response.status_code}")
+    
+    def _get_price_coinpaprika(self):
+        """Get price from Coinpaprika API"""
+        url = f"https://api.coinpaprika.com/v1/tickers/{self.coin_symbol.lower()}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return data['quotes']['USD']['price']
+        else:
+            raise Exception(f"Coinpaprika returned status code {response.status_code}")
+    
+    def _get_price_crypto_compare(self):
+        """Get price from CryptoCompare API"""
+        url = f"https://min-api.cryptocompare.com/data/price"
+        params = {
+            'fsym': self.coin_symbol.upper(),
+            'tsyms': 'USD'
+        }
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if 'USD' in data:
+                return data['USD']
+        else:
+            raise Exception(f"CryptoCompare returned status code {response.status_code}")
+    
+    def _get_price_binance(self):
+        """Get price from Binance API"""
+        url = f"https://api.binance.com/api/v3/ticker/price"
+        params = {
+            'symbol': f"{self.coin_symbol.upper()}USDT"
+        }
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return float(data['price'])
+        else:
+            raise Exception(f"Binance returned status code {response.status_code}")
 
     def calculate_portfolio_value(self):
         """
