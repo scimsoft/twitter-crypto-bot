@@ -1,6 +1,6 @@
-# Twitter Crypto Bot - Technical Documentation
+# News-Based Crypto Bot - Technical Documentation
 
-Technical overview of the Twitter Crypto Trading Bot architecture, implementation, and functionality.
+Technical overview of the News-Based Crypto Trading Bot architecture, implementation, and functionality.
 
 ## Architecture Overview
 

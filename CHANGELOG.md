@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Twitter Crypto Trading Bot project will be documented in this file.
+All notable changes to the News-Based Crypto Trading Bot project will be documented in this file.
 
 ## [Unreleased] - YYYY-MM-DD
 

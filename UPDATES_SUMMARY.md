@@ -1,6 +1,6 @@
-# Twitter Crypto Bot - Updates Summary
+# News-Based Crypto Bot - Updates Summary
 
-This document summarizes all the enhancements and updates made to the Twitter Crypto Trading Bot.
+This document summarizes all the enhancements and updates made to the News-Based Crypto Trading Bot.
 
 ## 🆕 New Features Added
 

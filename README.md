@@ -1,10 +1,10 @@
-# Twitter Crypto Trading Bot
+# News-Based Crypto Trading Bot
 
-A sophisticated cryptocurrency trading bot that uses sentiment analysis from Twitter and news feeds to make automated trading decisions.
+A sophisticated cryptocurrency trading bot that uses sentiment analysis from news feeds to make automated trading decisions.
 
 ## 🚀 Features
 
-- **Sentiment Analysis**: Analyzes Twitter and news feed sentiment to make trading decisions
+- **Sentiment Analysis**: Analyzes news feed sentiment to make trading decisions
 - **Multi-Coin Support**: Currently configured for DOGE trading
 - **Risk Management**: Built-in stop-loss and position sizing controls
 - **Simulated Trading**: Paper trading mode for testing strategies
@@ -17,9 +17,9 @@ A sophisticated cryptocurrency trading bot that uses sentiment analysis from Twi
 ### Core Components
 
 1. **Sentiment Analysis Engine**
-   - Twitter API integration for tweet sentiment
-   - News feed analysis (RSS feeds)
+   - News feed analysis (RSS feeds from world news, US news, and conflict sources)
    - Enhanced logging per news source
+   - TextBlob sentiment analysis
 
 2. **Trading Logic**
    - Buy threshold: 0.300 (positive sentiment)
@@ -39,7 +39,6 @@ A sophisticated cryptocurrency trading bot that uses sentiment analysis from Twi
 Create a `.env` file with the following variables:
 
 ```env
-TWITTER_BEARER_TOKEN=your_twitter_bearer_token
 EXCHANGE_API_KEY=your_exchange_api_key
 EXCHANGE_SECRET_KEY=your_exchange_secret_key
 COIN_GECKO_API_KEY=your_coin_gecko_api_key

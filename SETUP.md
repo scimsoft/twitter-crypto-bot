@@ -1,6 +1,6 @@
-# Twitter Crypto Bot Setup Guide
+# News-Based Crypto Bot Setup Guide
 
-Complete guide to set up and run the Twitter Crypto Trading Bot.
+Complete guide to set up and run the News-Based Crypto Trading Bot.
 
 ## Prerequisites
 
