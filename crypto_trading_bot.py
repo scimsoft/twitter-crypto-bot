@@ -20,6 +20,9 @@ load_dotenv('/home/gerrit/.openclaw/workspace/twitter-crypto-bot/.env')
 sys.path.insert(0, '/home/gerrit/.openclaw/workspace/twitter-crypto-bot')
 sys.path.insert(0, '/home/gerrit/.openclaw/workspace')
 
+# Import the enhanced sentiment logger
+from sentiment_logger import SentimentLogger
+
 try:
     from reuters_sentiment_tracker import ReutersSentimentTracker
     BOT_AVAILABLE = True
@@ -46,7 +49,10 @@ class AutomatedCryptoTradingBot:
         self.is_running = False
         self.trade_history = []
         self.last_analysis_time = None
-        self.interval_seconds = 3600  # 1 hour
+        self.interval_seconds = 900  # 15 minutes (changed from 1 hour)
+        
+        # Initialize the enhanced sentiment logger
+        self.sentiment_logger = SentimentLogger()
         
         if BOT_AVAILABLE:
             self.tracker = ReutersSentimentTracker()
@@ -151,6 +157,19 @@ class AutomatedCryptoTradingBot:
             logger.info(f"Sentiment analysis complete. Signal: {signal}")
             logger.info(f"Average compound score: {sentiment_data['aggregate_results']['average_compound']}")
             
+            # NEW: Log sentiment per feed using enhanced logging system
+            if 'feed_sentiments' in sentiment_data:
+                # Log sentiment for each feed source
+                feed_sentiments = sentiment_data['feed_sentiments']
+                overall_sentiment = sentiment_data['aggregate_results']['average_compound']
+                self.sentiment_logger.log_sentiment_per_feed(feed_sentiments, overall_sentiment)
+            else:
+                # If feed-specific data is not available, log overall sentiment
+                overall_sentiment = sentiment_data['aggregate_results']['average_compound']
+                # Create a basic feed mapping for logging purposes
+                basic_feeds = {"Reuters_Aggregate": overall_sentiment}
+                self.sentiment_logger.log_sentiment_per_feed(basic_feeds, overall_sentiment)
+            
             # Execute trade based on signal
             trade = self.execute_trade(signal, sentiment_data)
             
@@ -220,7 +239,8 @@ def main():
     Main function to run the trading bot
     """
     print("Automated Crypto Trading Bot based on Reuters Sentiment")
-    print("=" * 55)
+    print("Enhanced with per-feed sentiment tracking and analysis")
+    print("=" * 65)
     
     # Check dependencies
     if not BOT_AVAILABLE:
@@ -247,11 +267,12 @@ def main():
     # Initialize the bot
     bot = AutomatedCryptoTradingBot()
     
-    print("Starting hourly monitoring of Reuters sentiment for crypto trading...")
+    print("Starting 15-minute monitoring of Reuters sentiment for crypto trading...")
+    print("Enhanced sentiment logging tracks individual feed sources")
     print("Press Ctrl+C to stop the bot")
     
     try:
-        # Start the hourly monitoring
+        # Start the monitoring
         bot.start_hourly_monitoring()
     except KeyboardInterrupt:
         print("\nShutting down trading bot...")

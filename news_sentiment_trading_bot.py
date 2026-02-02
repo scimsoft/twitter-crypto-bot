@@ -4,6 +4,7 @@ News-Based Crypto Trading Bot
 Uses world news feeds for sentiment analysis instead of Twitter
 """
 
+from sentiment_logger import SentimentLogger
 import requests
 import json
 import time

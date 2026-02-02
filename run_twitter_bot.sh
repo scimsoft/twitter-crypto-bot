@@ -1,4 +1,5 @@
 #!/bin/bash
+export PYTHONPATH="$PYTHONPATH:$(pwd)"
 
 # Change to the twitter-crypto-bot directory
 cd /home/gerrit/.openclaw/workspace/twitter-crypto-bot
