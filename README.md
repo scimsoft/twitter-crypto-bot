@@ -1,6 +1,6 @@
 # News-Based Crypto Trading Bot
 
-A sophisticated cryptocurrency trading bot that uses sentiment analysis from news feeds to make automated trading decisions.
+A sophisticated cryptocurrency trading bot that uses sentiment analysis from diverse news feeds to make automated trading decisions.
 
 ## 🚀 Features
 
@@ -11,15 +11,20 @@ A sophisticated cryptocurrency trading bot that uses sentiment analysis from new
 - **Real-time Monitoring**: 15-minute analysis cycles
 - **Enhanced Logging**: Per-feed sentiment tracking and analysis
 - **Automated Execution**: Cron job integration for continuous operation
+- **Keyword Filtering**: Focuses on crypto-relevant articles only
+- **Expanded Feed Coverage**: 44+ diverse news sources across categories
+- **Content Cleaning**: Removes HTML tags and URLs for better analysis
 
 ## 🛠️ Architecture
 
 ### Core Components
 
 1. **Sentiment Analysis Engine**
-   - News feed analysis (RSS feeds from world news, US news, and conflict sources)
+   - News feed analysis (RSS feeds from world news, US news, finance news, and crypto-specific sources)
+   - Keyword-based filtering for crypto-relevant content
    - Enhanced logging per news source
    - TextBlob sentiment analysis
+   - Content cleaning and preprocessing
 
 2. **Trading Logic**
    - Buy threshold: 0.300 (positive sentiment)
@@ -31,6 +36,60 @@ A sophisticated cryptocurrency trading bot that uses sentiment analysis from new
    - Real-time price monitoring
    - Sentiment scoring algorithms
    - Trade execution logic
+
+## 📊 Feed Categories
+
+### World News Feeds (6 feeds)
+- BBC World News
+- Al Jazeera
+- Deutsche Welle
+- New York Times World
+- Financial Times World
+- The Guardian World
+
+### US News Feeds (6 feeds)
+- New York Times US
+- ABC News US
+- USA Today Top Stories
+- Fox News Latest
+- NBC News Top Stories
+- Washington Post Business
+
+### Financial News Feeds (15 feeds)
+- Reuters Business News
+- Reuters Top News
+- Reuters Markets News
+- CNN Money International
+- Financial Times General
+- Wall Street Journal
+- MarketWatch Top Stories
+- CNBC Top Stories
+- Investing.com News
+- Bloomberg
+- The Economist Economics
+- Seeking Alpha Market Currents
+- Business Insider
+- CNN Money Top Stories
+- Financial Post
+
+### Crypto News Feeds (17 feeds)
+- CoinTelegraph
+- CryptoPotato
+- Decrypt
+- The Block
+- Crypto.news
+- CoinDesk
+- Crypto Coins News (CCN)
+- Bitcoin.com
+- 99 Bitcoins
+- NewsBTC
+- Bitcoin Magazine
+- Ethereum World News
+- CoinCentral
+- Live Bitcoin News
+- BitsOnline
+- CryptoSlate
+- CryptoVest
 
 ## 📋 Configuration
 
@@ -50,7 +109,43 @@ COIN_GECKO_API_KEY=your_coin_gecko_api_key
 - **Analysis Frequency**: Every 15 minutes
 - **Position Size**: 20% of portfolio per trade
 - **Stop Loss**: 5% (configurable)
-- **Take Profit**: 10% (configurable)
+- **Take Profit**: 15% (configurable)
+
+## 🚀 Running the Bot
+
+### Manual Execution
+```bash
+python3 news_sentiment_trading_bot.py
+```
+
+### With the Run Script
+```bash
+bash run_news_bot.sh
+```
+
+### Cron Job
+The bot is configured to run every 15 minutes via cron job:
+```
+*/15 * * * * cd /home/gerrit/.openclaw/workspace/twitter-crypto-bot && /usr/bin/env bash run_news_bot.sh >> /home/gerrit/.openclaw/workspace/twitter-crypto-bot/trading_bot_cron.log 2>&1
+```
+
+## 🎯 Keyword Filtering
+
+The bot uses intelligent filtering to analyze sentiment only from articles containing crypto-related keywords:
+- Core crypto terms: bitcoin, ethereum, dogecoin, cryptocurrency, crypto, blockchain
+- Market terms: market, trading, finance, investment, volatility
+- Economic terms: fed, inflation, monetary policy, regulation, adoption
+- Technology terms: decentralized, nft, web3, wallet, exchange
+- Slang/terms: hodl, fomo, fud, whale
+
+## 📈 Expected Benefits
+
+- **Higher Accuracy**: Sentiment scores reflect actual crypto market conditions
+- **Better Responsiveness**: Faster reaction to crypto-specific market-moving news
+- **Improved Performance**: Reduced processing of irrelevant articles
+- **Better Signal-to-Noise Ratio**: Trading signals based on relevant content only
+- **Diversified Information**: Multiple perspectives for comprehensive analysis
+- **Enhanced Relevance**: Focus on content that directly impacts crypto markets
 
 ## 🚀 Installation
 
