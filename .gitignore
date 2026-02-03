@@ -54,3 +54,4 @@ wheels/
 .env.local
 .env.dev
 .env.test
+nohup.out

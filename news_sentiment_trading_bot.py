@@ -9,6 +9,7 @@ import requests
 import json
 import time
 import logging
+import os
 from datetime import datetime
 from collections import deque
 import statistics
@@ -16,8 +17,11 @@ from textblob import TextBlob
 import feedparser
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 class NewsBasedTradingBot:
     def __init__(self, initial_capital=10000, coin_symbol="DOGE"):
@@ -33,47 +37,201 @@ class NewsBasedTradingBot:
         self.trade_history = []  # Track all trades
         self.sentiment_history = deque(maxlen=50)  # Track sentiment scores
         self.portfolio_history = deque(maxlen=100)  # Track portfolio value over time
-        
+        self.feed_error_counts = {}  # Track error counts for each feed URL
+        self.removed_feeds_file = "removed_feeds.json"  # File to store removed feed URLs
+        self.removed_feeds = set()  # Set of removed feed URLs
+
+        # Load previously removed feeds
+        self._load_removed_feeds()
+
         # Strategy optimization parameters
-        self.buy_threshold = 0.3  # Buy when sentiment is above this
-        self.sell_threshold = -0.2  # Sell when sentiment is below this
+        # Using total_sentiment (sum) instead of average, so thresholds are higher
+        self.buy_threshold = 5.0  # Buy when total_sentiment is above this
+        self.sell_threshold = -3.0  # Sell when total_sentiment is below this
         self.max_position_size = 0.2  # Max 20% of portfolio per trade
         self.stop_loss_pct = 0.05  # 5% stop loss
         self.take_profit_pct = 0.15  # 15% take profit
-        
+
         # World news RSS feeds (focusing on global events, conflicts, and politics)
-        self.world_news_feeds = [
-            'https://feeds.bbci.co.uk/news/world/rss.xml',
-            'https://www.aljazeera.com/xml/rss/all.xml',
-            'https://rss.dw.com/xml/rss-en-all',
-            'https://www.france24.com/en/rss',
-            'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
-            'https://www.hongkongfp.com/feed/',
-            'https://www.tabnak.ir/fa/rss/allnews',
-            'https://lenta.ru/rss/',
-            'https://www.rt.com/rss/',
-            'https://www.ft.com/world?format=rss',
-            'https://timesofindia.indiatimes.com/rssfeeds/296589292.cms',
-            'https://www.financialsamurai.com/feed/'
+        world_news_feeds_raw = [
+            "https://feeds.bbci.co.uk/news/world/rss.xml",
+            "https://www.aljazeera.com/xml/rss/all.xml",
+            "https://rss.dw.com/xml/rss-en-all",
+            "https://www.france24.com/en/rss",
+            "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+            "https://www.tabnak.ir/fa/rss/allnews",
+            "https://lenta.ru/rss/",
+            "https://www.ft.com/world?format=rss",
+            "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms",
+            "https://www.financialsamurai.com/feed/",
         ]
         
         # US news RSS feeds
-        self.us_news_feeds = [
-            'https://rss.nytimes.com/services/xml/rss/nyt/US.xml',
-            'https://abcnews.go.com/abcnews/usheadlines'
+        us_news_feeds_raw = [
+            "https://rss.nytimes.com/services/xml/rss/nyt/US.xml",
+            "https://abcnews.go.com/abcnews/usheadlines",
         ]
-        
-        # Conflict/Wars focused feeds
-        self.conflict_feeds = [
-            'https://www.defensenews.com/arc/outboundfeeds/rss/category/global-navy-news/?outputType=xml',
-            'https://www.euronews.com/rss',
-            'https://www.theguardian.com/world/rss'
-        ]
-        
-        # Crypto-specific news sources (removed - not relevant to world events)
-        self.crypto_news_feeds = []
 
-        logger.info(f"News-Based Trading Bot initialized with ${initial_capital} in {coin_symbol}")
+        # Conflict/Wars focused feeds
+        conflict_feeds_raw = [
+            "https://www.defensenews.com/arc/outboundfeeds/rss/category/global-navy-news/?outputType=xml",
+            "https://www.euronews.com/rss",
+            "https://www.theguardian.com/world/rss",
+        ]
+
+        # Crypto-specific news sources (removed - not relevant to world events)
+        crypto_news_feeds_raw = [
+            "http://rss.cnn.com/rss/money_topstories.rss",
+            "http://thehill.com/rss/syndicator/19110",
+            "http://feeds.feedburner.com/DrudgeReportFeed",
+            "https://www.chron.com/rss/feed/News-270.php",
+            "https://www.usnews.com/rss/money",
+            "https://www.theatlantic.com/feed/all/",
+            "http://news.com.au/feed",
+            "http://www.chinadaily.com.cn/rss/world_rss.xml",
+            "http://indianexpress.com/section/world/feed/",
+            "https://www.sfgate.com/rss/feed/Business-and-Technology-News-448.php",
+            "http://variety.com/feed/",
+            "http://www.globaltimes.cn/rss/outbrain.xml",
+            "http://news.yahoo.com/rss",
+            "http://rss.cnn.com/rss/cnn_topstories.rss",
+            "http://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+            "http://feeds.foxnews.com/foxnews/latest",
+            "http://feeds.nbcnews.com/feeds/topstories",
+            "http://feeds.washingtonpost.com/rss/business",
+            "http://abcnews.go.com/abcnews/topstories",
+            "http://rssfeeds.usatoday.com/usatoday-NewsTopStories",
+            "http://www.latimes.com/rss2.0.xml",
+            "https://www.yahoo.com/news/rss/finance",
+            "http://feeds.bbci.co.uk/news/rss.xml",
+            "https://www.theguardian.com/business/economics/rss",
+            "http://www.dailymail.co.uk/articles.rss",
+            "https://www.forbes.com/real-time/feed2/",
+            "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+            "https://www.huffingtonpost.com/section/front-page/feed",
+            "http://feeds2.feedburner.com/businessinsider",
+            "https://www.rt.com/rss/",
+            "https://feeds.feedburner.com/NDTV-LatestNews",
+            "https://gadgets.ndtv.com/rss/feeds",
+            "http://www.telegraph.co.uk/rss.xml",
+            "http://www.independent.co.uk/rss",
+            "https://gizmodo.com/rss",
+            "http://www.wsj.com/xml/rss/3_7031.xml",
+            "http://feeds.reuters.com/reuters/topNews",
+            "https://live.engadget.com/rss.xml",
+            "https://www.investing.com/rss/news.rss",
+            "https://nypost.com/feed/",
+            "http://time.com/feed/",
+            "https://www.thesun.co.uk/feed/",
+            "https://asia.nikkei.com/rss/feed/nar",
+            "https://www.cbsnews.com/latest/rss/main",
+            "http://feeds.mashable.com/Mashable",
+            "https://www.wired.com/rss/",
+            "http://feeds.arstechnica.com/arstechnica/index/",
+            "https://feeds.feedburner.com/CoinDesk",
+            "http://feeds.marketwatch.com/marketwatch/topstories/",
+            "http://rss.dw.com/xml/rss-en-all",
+            "https://www.entrepreneur.com/latest.rss",
+            "https://seekingalpha.com/market_currents.xml",
+            "https://www.ft.com/?format=rss",
+            "http://www.firstpost.com/feed",
+            "http://fortune.com/feed/",
+            "https://www.androidauthority.com/feed/",
+            "https://qz.com/feed/",
+            "http://feeds.smh.com.au/rssheadlines/top.xml",
+            "http://www.economist.com/sections/economics/rss.xml",
+            "https://news.bitcoin.com/feed/",
+            "https://www.vanityfair.com/feed/rss",
+            "https://cointelegraph.com/feed",
+            "http://rss.nzherald.co.nz/rss/xml/nzhtsrsscid_000000698.xml",
+            "http://feeds2.feedburner.com/thenextweb",
+            "https://www.theglobeandmail.com/?service=rss&feed=topstories",
+            "https://www.ccn.com/feed/",
+            "http://www.scmp.com/rss/91/feed",
+            "https://www.prnewswire.com/rss/all-news-releases-from-PR-newswire-news.rss",
+            "https://boingboing.net/feed",
+            "https://wccftech.com/feed/",
+            "https://www.inverse.com/feed/articles/1.rss",
+            "https://99bitcoins.com/feed/",
+            "https://www.technologyreview.com/stories.rss",
+            "https://www.which.co.uk/news/feed/",
+            "https://rss.dailyfx.com/feeds/all",
+            "https://themerkle.com/feed/",
+            "http://www.newsbtc.com/feed/",
+            "https://hacked.com/feed",
+            "https://nextshark.com/feed/",
+            "http://business.financialpost.com/feed",
+            "http://abc13.com/feed/",
+            "http://vancouversun.com/feed",
+            "https://bitcoinmagazine.com/feed",
+            "http://www.valuewalk.com/feed/",
+            "http://www.dailynews.com/feed/",
+            "https://www.moneyweb.co.za/feed",
+            "https://coincentral.com/feed/",
+            "http://ethereumworldnews.com/feed/",
+            "https://www.coinspeaker.com/feed/",
+            "https://www.profitconfidential.com/feed/",
+            "http://reneweconomy.com.au/feed/",
+            "https://cryptovest.com/feed",
+            "https://www.smartcompany.com.au/feed/",
+            "http://www.livebitcoinnews.com/feed",
+            "https://www.bitsonline.com/feed/",
+            "http://www.sci-news.com/feed",
+            "https://stocknewsjournal.com/feed/",
+            "https://oracletimes.com/feed/",
+            "http://www.bankingtech.com/feed",
+            "https://www.influencive.com/feed/",
+            "https://stocknewsgazette.com/feed/",
+            "https://etfdailynews.com/feed/",
+            "https://71republic.com/feed/",
+            "https://news4c.com/feed/",
+            "https://flintdaily.com/feed/",
+            "https://solarindustrymag.com/feed",
+            "https://finnewsdaily.com/feed",
+            "https://cryptoslate.com/feed/",
+            "https://www.techllog.com/feed/",
+            "http://cryptocrimson.com/feed",
+        ]
+        
+        # Filter out removed feeds from all feed lists
+        self.world_news_feeds = [f for f in world_news_feeds_raw if f not in self.removed_feeds]
+        self.us_news_feeds = [f for f in us_news_feeds_raw if f not in self.removed_feeds]
+        self.conflict_feeds = [f for f in conflict_feeds_raw if f not in self.removed_feeds]
+        self.crypto_news_feeds = [f for f in crypto_news_feeds_raw if f not in self.removed_feeds]
+        
+        if self.removed_feeds:
+            logger.info(f"Filtered out {len(self.removed_feeds)} previously removed feed(s)")
+
+        logger.info(
+            f"News-Based Trading Bot initialized with ${initial_capital} in {coin_symbol}"
+        )
+
+    def _load_removed_feeds(self):
+        """
+        Load previously removed feed URLs from file
+        """
+        if os.path.exists(self.removed_feeds_file):
+            try:
+                with open(self.removed_feeds_file, 'r') as f:
+                    removed_list = json.load(f)
+                    self.removed_feeds = set(removed_list)
+                    logger.info(f"Loaded {len(self.removed_feeds)} removed feed(s) from {self.removed_feeds_file}")
+            except Exception as e:
+                logger.warning(f"Failed to load removed feeds file: {e}")
+                self.removed_feeds = set()
+        else:
+            self.removed_feeds = set()
+
+    def _save_removed_feeds(self):
+        """
+        Save removed feed URLs to file
+        """
+        try:
+            with open(self.removed_feeds_file, 'w') as f:
+                json.dump(list(self.removed_feeds), f, indent=2)
+            logger.info(f"Saved {len(self.removed_feeds)} removed feed(s) to {self.removed_feeds_file}")
+        except Exception as e:
+            logger.error(f"Failed to save removed feeds file: {e}")
 
     def get_current_price(self):
         """
@@ -84,22 +242,21 @@ class NewsBasedTradingBot:
             self._get_price_coingecko,
             self._get_price_coinpaprika,
             self._get_price_crypto_compare,
-            self._get_price_binance
+            self._get_price_binance,
         ]
-        
+
         for api_func in apis_to_try:
             try:
                 price = api_func()
                 if price and price > 0:
-                    self.price_history.append({
-                        'price': price,
-                        'timestamp': datetime.now().isoformat()
-                    })
+                    self.price_history.append(
+                        {"price": price, "timestamp": datetime.now().isoformat()}
+                    )
                     return price
             except Exception as e:
                 logger.debug(f"Error using {api_func.__name__}: {str(e)}")
                 continue
-        
+
         # If all APIs fail, return a default price for DOGE
         logger.warning("All price APIs failed, using default price")
         return 0.10
@@ -107,56 +264,50 @@ class NewsBasedTradingBot:
     def _get_price_coingecko(self):
         """Get price from CoinGecko API"""
         url = f"https://api.coingecko.com/api/v3/simple/price"
-        params = {
-            'ids': self.coin_symbol.lower(),
-            'vs_currencies': 'usd'
-        }
-        
+        params = {"ids": self.coin_symbol.lower(), "vs_currencies": "usd"}
+
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if self.coin_symbol.lower() in data:
-                return data[self.coin_symbol.lower()]['usd']
+                return data[self.coin_symbol.lower()]["usd"]
         elif response.status_code == 429:
             raise Exception("CoinGecko rate limit exceeded")
         else:
             raise Exception(f"CoinGecko returned status code {response.status_code}")
-    
+
     def _get_price_coinpaprika(self):
         """Get price from Coinpaprika API"""
         url = f"https://api.coinpaprika.com/v1/tickers/{self.coin_symbol.lower()}"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return data['quotes']['USD']['price']
+            return data["quotes"]["USD"]["price"]
         else:
             raise Exception(f"Coinpaprika returned status code {response.status_code}")
-    
+
     def _get_price_crypto_compare(self):
         """Get price from CryptoCompare API"""
         url = f"https://min-api.cryptocompare.com/data/price"
-        params = {
-            'fsym': self.coin_symbol.upper(),
-            'tsyms': 'USD'
-        }
+        params = {"fsym": self.coin_symbol.upper(), "tsyms": "USD"}
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            if 'USD' in data:
-                return data['USD']
+            if "USD" in data:
+                return data["USD"]
         else:
-            raise Exception(f"CryptoCompare returned status code {response.status_code}")
-    
+            raise Exception(
+                f"CryptoCompare returned status code {response.status_code}"
+            )
+
     def _get_price_binance(self):
         """Get price from Binance API"""
         url = f"https://api.binance.com/api/v3/ticker/price"
-        params = {
-            'symbol': f"{self.coin_symbol.upper()}USDT"
-        }
+        params = {"symbol": f"{self.coin_symbol.upper()}USDT"}
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return float(data['price'])
+            return float(data["price"])
         else:
             raise Exception(f"Binance returned status code {response.status_code}")
 
@@ -166,10 +317,9 @@ class NewsBasedTradingBot:
         """
         current_price = self.get_current_price()
         total_value = self.current_capital + (self.holdings * current_price)
-        self.portfolio_history.append({
-            'value': total_value,
-            'timestamp': datetime.now().isoformat()
-        })
+        self.portfolio_history.append(
+            {"value": total_value, "timestamp": datetime.now().isoformat()}
+        )
         return total_value
 
     def analyze_news_sentiment(self):
@@ -177,37 +327,57 @@ class NewsBasedTradingBot:
         Analyze sentiment from world news, US news, and conflict feeds
         """
         # Combine all types of news feeds: world news, US news, and conflicts
-        all_feeds = self.world_news_feeds + self.us_news_feeds + self.conflict_feeds
-        
+        # all_feeds = self.world_news_feeds + self.us_news_feeds + self.conflict_feeds + self.crypto_news_feeds
+        all_feeds = self.crypto_news_feeds.copy()  # Use copy to avoid modifying original during iteration
+
         total_sentiment = 0
         article_count = 0
         positive_articles = 0
         negative_articles = 0
         neutral_articles = 0
-        
+        feeds_to_remove = []  # Track feeds that should be removed
+
         for feed_url in all_feeds:
             try:
-                # Parse the RSS feed
-                feed = feedparser.parse(feed_url)
-                
-                # Analyze recent articles (last 10)
-                articles_to_analyze = feed.entries[:10] if len(feed.entries) > 10 else feed.entries
-                
-                for entry in articles_to_analyze:
-                    title = entry.title if hasattr(entry, 'title') else ""
-                    summary = entry.summary if hasattr(entry, 'summary') else ""
+                # Fetch the RSS feed with timeout
+                try:
+                    response = requests.get(feed_url, timeout=10)
+                    response.raise_for_status()
+                    # Parse the RSS feed content
+                    feed = feedparser.parse(response.content)
+                    # Reset error count on successful fetch
+                    if feed_url in self.feed_error_counts:
+                        self.feed_error_counts[feed_url] = 0
+                except requests.RequestException as e:
+                    # Increment error count
+                    self.feed_error_counts[feed_url] = self.feed_error_counts.get(feed_url, 0) + 1
+                    error_count = self.feed_error_counts[feed_url]
+                    logger.warning(f"Failed to fetch feed {feed_url} (error #{error_count}): {e}")
                     
+                    # Mark for removal if error count reaches 2
+                    if error_count >= 2:
+                        feeds_to_remove.append(feed_url)
+                        logger.info(f"Removing feed {feed_url} after {error_count} consecutive errors")
+                    continue
+
+                # Analyze only the first article from each feed
+                articles_to_analyze = feed.entries[:1] if feed.entries else []
+
+                for entry in articles_to_analyze:
+                    title = entry.title if hasattr(entry, "title") else ""
+                    summary = entry.summary if hasattr(entry, "summary") else ""
+
                     # Combine title and summary for sentiment analysis
                     text = f"{title} {summary}".lower()
-                    
+
                     # Skip if text is too short
                     if len(text.strip()) < 10:
                         continue
-                    
+
                     # Use TextBlob for sentiment analysis
                     blob = TextBlob(text)
                     sentiment_score = blob.sentiment.polarity  # Range: -1 to 1
-                    
+
                     # Classify sentiment
                     if sentiment_score > 0.1:
                         positive_articles += 1
@@ -215,61 +385,109 @@ class NewsBasedTradingBot:
                         negative_articles += 1
                     else:
                         neutral_articles += 1
-                    
+
                     total_sentiment += sentiment_score
                     article_count += 1
-                    
+
                     # Limit to avoid overwhelming with too many articles
-                    if article_count >= 50:  # Maximum 50 articles per cycle
+                    if article_count >= 250:  # Maximum 50 articles per cycle
                         break
-                
-                if article_count >= 50:
+
+                if article_count >= 250:
                     break
-                    
+
             except Exception as e:
-                logger.debug(f"Error parsing feed {feed_url}: {str(e)}")
+                # Increment error count
+                self.feed_error_counts[feed_url] = self.feed_error_counts.get(feed_url, 0) + 1
+                error_count = self.feed_error_counts[feed_url]
+                logger.debug(f"Error parsing feed {feed_url} (error #{error_count}): {str(e)}")
+                
+                # Mark for removal if error count reaches 2
+                if error_count >= 2:
+                    feeds_to_remove.append(feed_url)
+                    logger.info(f"Removing feed {feed_url} after {error_count} consecutive errors")
                 continue
         
+        # Remove feeds that have failed 2 times
+        if feeds_to_remove:
+            for feed_url in feeds_to_remove:
+                if feed_url in self.world_news_feeds:
+                    self.world_news_feeds.remove(feed_url)
+                if feed_url in self.us_news_feeds:
+                    self.us_news_feeds.remove(feed_url)
+                if feed_url in self.conflict_feeds:
+                    self.conflict_feeds.remove(feed_url)
+                if feed_url in self.crypto_news_feeds:
+                    self.crypto_news_feeds.remove(feed_url)
+                # Add to removed feeds set for persistence
+                self.removed_feeds.add(feed_url)
+                # Clean up error count tracking
+                if feed_url in self.feed_error_counts:
+                    del self.feed_error_counts[feed_url]
+            
+            # Save removed feeds to file for persistence
+            self._save_removed_feeds()
+
         # Calculate average sentiment
         avg_sentiment = total_sentiment / article_count if article_count > 0 else 0
-        self.sentiment_history.append({
-            'score': avg_sentiment,
-            'timestamp': datetime.now().isoformat(),
-            'article_count': article_count,
-            'positive_articles': positive_articles,
-            'negative_articles': negative_articles,
-            'neutral_articles': neutral_articles
-        })
-        
-        logger.info(f"Analyzed {article_count} articles. Avg sentiment: {avg_sentiment:.3f}")
-        logger.info(f"Breakdown: {positive_articles} positive, {negative_articles} negative, {neutral_articles} neutral")
-        
-        return avg_sentiment, positive_articles, negative_articles, neutral_articles
+        self.sentiment_history.append(
+            {
+                "score": avg_sentiment,  # Keep avg for backward compatibility/display
+                "total_sentiment": total_sentiment,  # Store total_sentiment for threshold comparison
+                "timestamp": datetime.now().isoformat(),
+                "article_count": article_count,
+                "positive_articles": positive_articles,
+                "negative_articles": negative_articles,
+                "neutral_articles": neutral_articles,
+            }
+        )
 
-    def generate_signal(self, sentiment_score):
+        logger.info(
+            f"Analyzed {article_count} articles. Avg sentiment: {avg_sentiment:.3f}"
+        )
+
+        logger.info(
+            f"Breakdown: {positive_articles} positive, {negative_articles} negative, {neutral_articles} neutral"
+        )
+
+        logger.info(
+            f"total sentiment: {total_sentiment}"
+        )
+
+        return total_sentiment, avg_sentiment, positive_articles, negative_articles, neutral_articles
+
+    def generate_signal(self, total_sentiment):
         """
-        Generate trading signal based on sentiment and market conditions
+        Generate trading signal based on total_sentiment (sum of all sentiment scores) and market conditions
+        Uses total_sentiment instead of average sentiment for threshold comparison
         """
         # Adjust thresholds based on market volatility
         current_price = self.get_current_price()
         if len(self.price_history) > 10:
-            prices = [p['price'] for p in list(self.price_history)[-10:]]
-            volatility = statistics.stdev(prices) / statistics.mean(prices) if len(set(prices)) > 1 else 0.02
-            
+            prices = [p["price"] for p in list(self.price_history)[-10:]]
+            volatility = (
+                statistics.stdev(prices) / statistics.mean(prices)
+                if len(set(prices)) > 1
+                else 0.02
+            )
+
             # Adjust thresholds based on volatility
             dynamic_buy_threshold = self.buy_threshold * (1 + volatility * 2)
             dynamic_sell_threshold = self.sell_threshold * (1 + volatility * 2)
+            logger.info(f"Volatility: {volatility:.4f}, Dynamic buy threshold: {dynamic_buy_threshold:.3f}, Dynamic sell threshold: {dynamic_sell_threshold:.3f}")
         else:
             dynamic_buy_threshold = self.buy_threshold
             dynamic_sell_threshold = self.sell_threshold
-        
-        # Generate signal based on sentiment and thresholds
-        if sentiment_score >= dynamic_buy_threshold:
-            return 'BUY'
-        elif sentiment_score <= dynamic_sell_threshold:
-            return 'SELL'
+            logger.info(f"Using base thresholds - Buy: {dynamic_buy_threshold:.3f}, Sell: {dynamic_sell_threshold:.3f}")
+
+        # Generate signal based on total_sentiment and thresholds
+        logger.info(f"Comparing total_sentiment ({total_sentiment:.3f}) against thresholds (Buy: {dynamic_buy_threshold:.3f}, Sell: {dynamic_sell_threshold:.3f})")
+        if total_sentiment >= dynamic_buy_threshold:
+            return "BUY"
+        elif total_sentiment <= dynamic_sell_threshold:
+            return "SELL"
         else:
-            return 'HOLD'
+            return "HOLD"
 
     def execute_trade(self, signal, sentiment_score):
         """
@@ -277,58 +495,66 @@ class NewsBasedTradingBot:
         """
         current_price = self.get_current_price()
         portfolio_value = self.calculate_portfolio_value()
-        
+
         # Calculate position size based on sentiment strength and risk management
         sentiment_strength = abs(sentiment_score)
-        position_size_ratio = min(self.max_position_size, sentiment_strength * 0.5)  # Cap at max position size
-        
+        position_size_ratio = min(
+            self.max_position_size, sentiment_strength * 0.5
+        )  # Cap at max position size
+
         trade_amount = portfolio_value * position_size_ratio
-        
-        if signal == 'BUY':
+
+        if signal == "BUY":
             if self.current_capital >= trade_amount:
                 coins_to_buy = trade_amount / current_price
                 self.holdings += coins_to_buy
                 self.current_capital -= trade_amount
-                
+
                 trade_record = {
-                    'type': 'BUY',
-                    'amount_usd': trade_amount,
-                    'coins': coins_to_buy,
-                    'price': current_price,
-                    'timestamp': datetime.now().isoformat(),
-                    'sentiment': sentiment_score
+                    "type": "BUY",
+                    "amount_usd": trade_amount,
+                    "coins": coins_to_buy,
+                    "price": current_price,
+                    "timestamp": datetime.now().isoformat(),
+                    "sentiment": sentiment_score,
                 }
-                
+
                 self.trade_history.append(trade_record)
-                logger.info(f"BUY executed: {coins_to_buy:.4f} {self.coin_symbol} at ${current_price:.4f}, spent ${trade_amount:.2f}")
+                logger.info(
+                    f"BUY executed: {coins_to_buy:.4f} {self.coin_symbol} at ${current_price:.4f}, spent ${trade_amount:.2f}"
+                )
                 return True
             else:
                 logger.info("Insufficient funds to execute BUY")
                 return False
-                
-        elif signal == 'SELL':
+
+        elif signal == "SELL":
             if self.holdings > 0:
-                coins_to_sell = min(self.holdings, (trade_amount / current_price))  # Sell portion based on signal strength
+                coins_to_sell = min(
+                    self.holdings, (trade_amount / current_price)
+                )  # Sell portion based on signal strength
                 proceeds = coins_to_sell * current_price
                 self.holdings -= coins_to_sell
                 self.current_capital += proceeds
-                
+
                 trade_record = {
-                    'type': 'SELL',
-                    'amount_usd': proceeds,
-                    'coins': coins_to_sell,
-                    'price': current_price,
-                    'timestamp': datetime.now().isoformat(),
-                    'sentiment': sentiment_score
+                    "type": "SELL",
+                    "amount_usd": proceeds,
+                    "coins": coins_to_sell,
+                    "price": current_price,
+                    "timestamp": datetime.now().isoformat(),
+                    "sentiment": sentiment_score,
                 }
-                
+
                 self.trade_history.append(trade_record)
-                logger.info(f"SELL executed: {coins_to_sell:.4f} {self.coin_symbol} at ${current_price:.4f}, received ${proceeds:.2f}")
+                logger.info(
+                    f"SELL executed: {coins_to_sell:.4f} {self.coin_symbol} at ${current_price:.4f}, received ${proceeds:.2f}"
+                )
                 return True
             else:
                 logger.info("No holdings to execute SELL")
                 return False
-        
+
         return False  # HOLD signal
 
     def optimize_strategy(self):
@@ -337,31 +563,31 @@ class NewsBasedTradingBot:
         """
         if len(self.trade_history) < 5:
             return  # Need enough trades to optimize
-        
+
         # Analyze recent performance to adjust parameters
         recent_trades = self.trade_history[-10:]  # Last 10 trades
         winning_trades = 0
         total_trades = len(recent_trades)
-        
+
         for i in range(1, len(recent_trades)):
-            prev_trade = recent_trades[i-1]
+            prev_trade = recent_trades[i - 1]
             curr_trade = recent_trades[i]
-            
-            if prev_trade['type'] == 'BUY' and curr_trade['type'] == 'SELL':
+
+            if prev_trade["type"] == "BUY" and curr_trade["type"] == "SELL":
                 # Check if this buy/sell pair was profitable
-                buy_price = prev_trade['price']
-                sell_price = curr_trade['price']
+                buy_price = prev_trade["price"]
+                sell_price = curr_trade["price"]
                 if sell_price > buy_price:
                     winning_trades += 1
-            elif prev_trade['type'] == 'SELL' and curr_trade['type'] == 'BUY':
+            elif prev_trade["type"] == "SELL" and curr_trade["type"] == "BUY":
                 # Check if this sell/buy pair was profitable (short position)
-                sell_price = prev_trade['price']
-                buy_price = curr_trade['price']
+                sell_price = prev_trade["price"]
+                buy_price = curr_trade["price"]
                 if sell_price > buy_price:
                     winning_trades += 1
-        
+
         win_rate = winning_trades / total_trades if total_trades > 0 else 0
-        
+
         # Adjust strategy based on win rate
         if win_rate < 0.4:  # Low win rate, be more conservative
             self.buy_threshold *= 1.1  # Make buying harder
@@ -370,9 +596,13 @@ class NewsBasedTradingBot:
         elif win_rate > 0.7:  # High win rate, be more aggressive
             self.buy_threshold *= 0.95  # Make buying easier
             self.sell_threshold *= 0.95  # Make selling harder
-            self.max_position_size = min(0.3, self.max_position_size * 1.1)  # Increase position size
-        
-        logger.info(f"Strategy optimized - Win rate: {win_rate:.2f}, Buy threshold: {self.buy_threshold:.3f}")
+            self.max_position_size = min(
+                0.3, self.max_position_size * 1.1
+            )  # Increase position size
+
+        logger.info(
+            f"Strategy optimized - Win rate: {win_rate:.2f}, Buy threshold: {self.buy_threshold:.3f}"
+        )
 
     def get_interface_data(self):
         """
@@ -380,40 +610,49 @@ class NewsBasedTradingBot:
         """
         current_price = self.get_current_price()
         portfolio_value = self.calculate_portfolio_value()
-        
+
         # Calculate profit/loss
         profit_loss = portfolio_value - self.initial_capital
         profit_loss_pct = (profit_loss / self.initial_capital) * 100
-        
+
         # Get recent sentiment
-        recent_sentiment_data = self.sentiment_history[-1] if self.sentiment_history else {'score': 0, 'positive_articles': 0, 'negative_articles': 0, 'neutral_articles': 0}
-        recent_sentiment = recent_sentiment_data['score']
-        
+        recent_sentiment_data = (
+            self.sentiment_history[-1]
+            if self.sentiment_history
+            else {
+                "score": 0,
+                "positive_articles": 0,
+                "negative_articles": 0,
+                "neutral_articles": 0,
+            }
+        )
+        recent_sentiment = recent_sentiment_data["score"]
+
         # Get recent trades
         recent_trades = self.trade_history[-5:] if self.trade_history else []
-        
+
         # Format interface data
         interface_data = {
-            'current_price': current_price,
-            'portfolio_value': portfolio_value,
-            'cash_balance': self.current_capital,
-            'holdings': self.holdings,
-            'holdings_value': self.holdings * current_price,
-            'initial_capital': self.initial_capital,
-            'profit_loss': profit_loss,
-            'profit_loss_pct': profit_loss_pct,
-            'coin_symbol': self.coin_symbol,
-            'sentiment_score': recent_sentiment,
-            'position_size': self.max_position_size,
-            'recent_trades': recent_trades,
-            'total_trades': len(self.trade_history),
-            'buy_threshold': self.buy_threshold,
-            'sell_threshold': self.sell_threshold,
-            'positive_articles': recent_sentiment_data['positive_articles'],
-            'negative_articles': recent_sentiment_data['negative_articles'],
-            'neutral_articles': recent_sentiment_data['neutral_articles']
+            "current_price": current_price,
+            "portfolio_value": portfolio_value,
+            "cash_balance": self.current_capital,
+            "holdings": self.holdings,
+            "holdings_value": self.holdings * current_price,
+            "initial_capital": self.initial_capital,
+            "profit_loss": profit_loss,
+            "profit_loss_pct": profit_loss_pct,
+            "coin_symbol": self.coin_symbol,
+            "sentiment_score": recent_sentiment,
+            "position_size": self.max_position_size,
+            "recent_trades": recent_trades,
+            "total_trades": len(self.trade_history),
+            "buy_threshold": self.buy_threshold,
+            "sell_threshold": self.sell_threshold,
+            "positive_articles": recent_sentiment_data["positive_articles"],
+            "negative_articles": recent_sentiment_data["negative_articles"],
+            "neutral_articles": recent_sentiment_data["neutral_articles"],
         }
-        
+
         return interface_data
 
     def print_interface(self):
@@ -421,89 +660,111 @@ class NewsBasedTradingBot:
         Print a simple text-based interface with trading information
         """
         data = self.get_interface_data()
-        
-        print("\n" + "="*70)
+
+        print("\n" + "=" * 70)
         print(f"           NEWS-BASED CRYPTO TRADING BOT INTERFACE")
-        print("="*70)
+        print("=" * 70)
         print(f"Current {data['coin_symbol']} Price:     ${data['current_price']:.6f}")
         print(f"Portfolio Value:          ${data['portfolio_value']:.2f}")
         print(f"Cash Balance:             ${data['cash_balance']:.2f}")
-        print(f"Holdings:                 {data['holdings']:.4f} {data['coin_symbol']} (${data['holdings_value']:.2f})")
-        print("-"*70)
-        print(f"Profit/Loss:              ${data['profit_loss']:.2f} ({data['profit_loss_pct']:+.2f}%)")
+        print(
+            f"Holdings:                 {data['holdings']:.4f} {data['coin_symbol']} (${data['holdings_value']:.2f})"
+        )
+        print("-" * 70)
+        print(
+            f"Profit/Loss:              ${data['profit_loss']:.2f} ({data['profit_loss_pct']:+.2f}%)"
+        )
         print(f"Initial Capital:          ${data['initial_capital']:.2f}")
-        print("-"*70)
-        print(f"Current Sentiment:        {data['sentiment_score']:.3f}")
-        print(f"Articles Analyzed:        {data['positive_articles']}+ / {data['negative_articles']}- / {data['neutral_articles']}=")
-        print(f"Buy Threshold:            {data['buy_threshold']:.3f}")
-        print(f"Sell Threshold:           {data['sell_threshold']:.3f}")
+        print("-" * 70)
+        recent_sentiment_data = (
+            self.sentiment_history[-1]
+            if self.sentiment_history
+            else {"total_sentiment": 0, "score": 0}
+        )
+        total_sent = recent_sentiment_data.get("total_sentiment", recent_sentiment_data.get("score", 0))
+        
+        print(f"Total Sentiment:          {total_sent:.3f} (used for thresholds)")
+        print(f"Average Sentiment:        {data['sentiment_score']:.3f}")
+        print(
+            f"Articles Analyzed:        {data['positive_articles']}+ / {data['negative_articles']}- / {data['neutral_articles']}="
+        )
+        print(f"Buy Threshold:            {data['buy_threshold']:.3f} (total_sentiment)")
+        print(f"Sell Threshold:           {data['sell_threshold']:.3f} (total_sentiment)")
         print(f"Position Size:            {(data['position_size']*100):.1f}%")
         print(f"Total Trades:             {data['total_trades']}")
-        print("="*70)
-        
-        if data['recent_trades']:
+        print("=" * 70)
+
+        if data["recent_trades"]:
             print("Recent Trades:")
-            for trade in reversed(data['recent_trades']):
-                trade_type = trade['type'].ljust(4)
-                coins = trade['coins']
-                price = trade['price']
-                amount = trade['amount_usd']
-                print(f"  {trade['timestamp'][11:19]} {trade_type} {coins:.4f} {data['coin_symbol']} @ ${price:.6f} (${amount:.2f})")
+            for trade in reversed(data["recent_trades"]):
+                trade_type = trade["type"].ljust(4)
+                coins = trade["coins"]
+                price = trade["price"]
+                amount = trade["amount_usd"]
+                print(
+                    f"  {trade['timestamp'][11:19]} {trade_type} {coins:.4f} {data['coin_symbol']} @ ${price:.6f} (${amount:.2f})"
+                )
         else:
             print("Recent Trades:           None")
-        
-        print("="*70)
+
+        print("=" * 70)
 
     def run_single_cycle(self):
         """
         Run one complete cycle of the trading bot
         """
         logger.info("Starting trading cycle...")
-        
+
         # Get current price
         current_price = self.get_current_price()
         logger.info(f"Current {self.coin_symbol} price: ${current_price:.6f}")
-        
+
         # Analyze sentiment from news feeds
-        sentiment_score, pos_articles, neg_articles, neu_articles = self.analyze_news_sentiment()
-        logger.info(f"Average sentiment score: {sentiment_score:.3f}")
-        
-        # Generate trading signal
-        signal = self.generate_signal(sentiment_score)
+        total_sentiment, avg_sentiment, pos_articles, neg_articles, neu_articles = (
+            self.analyze_news_sentiment()
+        )
+        logger.info(f"Total sentiment: {total_sentiment:.3f}, Average sentiment: {avg_sentiment:.3f}")
+
+        # Generate trading signal using total_sentiment
+        signal = self.generate_signal(total_sentiment)
         logger.info(f"Trading signal: {signal}")
-        
+
         # Execute trade if applicable
-        if signal in ['BUY', 'SELL']:
-            success = self.execute_trade(signal, sentiment_score)
+        # Use avg_sentiment for position sizing (normalized), total_sentiment is used for signal generation
+        if signal in ["BUY", "SELL"]:
+            success = self.execute_trade(signal, avg_sentiment)
             if success:
                 logger.info(f"{signal} order executed successfully")
             else:
                 logger.info(f"{signal} order failed")
-        
+
         # Optimize strategy based on performance
         self.optimize_strategy()
-        
+
         # Print current status
         self.print_interface()
-        
+
         return {
-            'price': current_price,
-            'sentiment': sentiment_score,
-            'signal': signal,
-            'portfolio_value': self.calculate_portfolio_value(),
-            'articles_breakdown': {
-                'positive': pos_articles,
-                'negative': neg_articles,
-                'neutral': neu_articles
-            }
+            "price": current_price,
+            "total_sentiment": total_sentiment,
+            "avg_sentiment": avg_sentiment,
+            "signal": signal,
+            "portfolio_value": self.calculate_portfolio_value(),
+            "articles_breakdown": {
+                "positive": pos_articles,
+                "negative": neg_articles,
+                "neutral": neu_articles,
+            },
         }
 
     def run_continuous(self, interval_minutes=15):
         """
         Run the trading bot continuously at specified intervals
         """
-        logger.info(f"Starting continuous trading mode (checking every {interval_minutes} minutes)")
-        
+        logger.info(
+            f"Starting continuous trading mode (checking every {interval_minutes} minutes)"
+        )
+
         while True:
             try:
                 self.run_single_cycle()
@@ -524,17 +785,19 @@ def main():
     try:
         # Initialize the bot with 10,000 DOGE coins equivalent in USD
         bot = NewsBasedTradingBot(initial_capital=10000, coin_symbol="DOGE")
-        
+
         print("News-Based Crypto Trading Bot is starting...")
-        print("This bot uses world news feeds for sentiment analysis instead of Twitter.")
+        print(
+            "This bot uses world news feeds for sentiment analysis instead of Twitter."
+        )
         print("Press Ctrl+C to stop the bot")
-        
+
         # Run a single cycle for testing
         bot.run_single_cycle()
-        
+
         # Run continuously with 15-minute intervals
         bot.run_continuous(interval_minutes=15)  # Run every 15 minutes
-        
+
     except Exception as e:
         logger.error(f"Error running News-Based Trading Bot: {str(e)}")
 
