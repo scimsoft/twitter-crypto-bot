@@ -10,6 +10,8 @@ import json
 import time
 import logging
 import os
+import sys
+import threading
 from datetime import datetime
 from collections import deque
 import statistics
@@ -40,9 +42,19 @@ class NewsBasedTradingBot:
         self.feed_error_counts = {}  # Track error counts for each feed URL
         self.removed_feeds_file = "removed_feeds.json"  # File to store removed feed URLs
         self.removed_feeds = set()  # Set of removed feed URLs
+        self.bot_data_file = "bot_data.json"  # File to store bot data for web interface
+        self.state_file = "bot_state.json"  # File to store bot state (holdings, capital, etc.)
+        self.interface_running = False  # Flag to control auto-updating interface
+        self.last_update_time = None  # Track last interface update
 
         # Load previously removed feeds
         self._load_removed_feeds()
+        
+        # Load bot state (holdings, capital, trade history)
+        self._load_bot_state()
+        
+        # Start background thread to save bot data for web interface
+        self._start_data_saver()
 
         # Strategy optimization parameters
         # Using total_sentiment (sum) instead of average, so thresholds are higher
@@ -232,6 +244,214 @@ class NewsBasedTradingBot:
             logger.info(f"Saved {len(self.removed_feeds)} removed feed(s) to {self.removed_feeds_file}")
         except Exception as e:
             logger.error(f"Failed to save removed feeds file: {e}")
+
+    def _save_bot_state(self):
+        """
+        Save bot state (holdings, capital, trade history) to file for persistence
+        """
+        try:
+            state = {
+                "initial_capital": self.initial_capital,
+                "current_capital": self.current_capital,
+                "holdings": self.holdings,
+                "coin_symbol": self.coin_symbol,
+                "trade_history": self.trade_history,
+                "price_history": list(self.price_history),
+                "sentiment_history": list(self.sentiment_history),
+                "portfolio_history": list(self.portfolio_history),
+                "buy_threshold": self.buy_threshold,
+                "sell_threshold": self.sell_threshold,
+                "max_position_size": self.max_position_size,
+                "last_saved": datetime.now().isoformat(),
+            }
+            
+            with open(self.state_file, 'w') as f:
+                json.dump(state, f, indent=2, default=str)
+            logger.debug(f"Saved bot state to {self.state_file}")
+        except Exception as e:
+            logger.error(f"Failed to save bot state: {e}")
+
+    def _load_bot_state(self):
+        """
+        Load bot state from file if it exists
+        """
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, 'r') as f:
+                    state = json.load(f)
+                
+                # Restore state
+                if "current_capital" in state:
+                    self.current_capital = float(state["current_capital"])
+                    logger.info(f"Loaded current capital: ${self.current_capital:.2f}")
+                
+                if "holdings" in state:
+                    self.holdings = float(state["holdings"])
+                    logger.info(f"Loaded holdings: {self.holdings:.4f} {self.coin_symbol}")
+                
+                if "initial_capital" in state:
+                    # Preserve the original initial capital
+                    self.initial_capital = float(state["initial_capital"])
+                
+                if "trade_history" in state:
+                    self.trade_history = state["trade_history"]
+                    logger.info(f"Loaded {len(self.trade_history)} previous trades")
+                
+                if "price_history" in state and state["price_history"]:
+                    self.price_history = deque(state["price_history"], maxlen=100)
+                
+                if "sentiment_history" in state and state["sentiment_history"]:
+                    self.sentiment_history = deque(state["sentiment_history"], maxlen=50)
+                
+                if "portfolio_history" in state and state["portfolio_history"]:
+                    self.portfolio_history = deque(state["portfolio_history"], maxlen=100)
+                
+                if "buy_threshold" in state:
+                    self.buy_threshold = float(state["buy_threshold"])
+                
+                if "sell_threshold" in state:
+                    self.sell_threshold = float(state["sell_threshold"])
+                
+                if "max_position_size" in state:
+                    self.max_position_size = float(state["max_position_size"])
+                
+                logger.info(f"Bot state loaded from {self.state_file}")
+                logger.info(f"Resuming with: ${self.current_capital:.2f} cash, {self.holdings:.4f} {self.coin_symbol} holdings")
+                
+            except Exception as e:
+                logger.warning(f"Failed to load bot state: {e}. Starting fresh.")
+        else:
+            logger.info("No previous bot state found. Starting fresh.")
+
+    def _save_bot_data_for_web_interface(self):
+        """
+        Save bot data to JSON file for web interface access
+        Builds data dict directly to ensure current state is captured.
+        Uses latest sentiment from sentiment_history.
+        """
+        try:
+            current_price = self.get_current_price()
+            portfolio_value = self.calculate_portfolio_value()
+            profit_loss = portfolio_value - self.initial_capital
+            profit_loss_pct = (profit_loss / self.initial_capital) * 100 if self.initial_capital > 0 else 0
+            
+            # Get recent sentiment data with total_sentiment
+            recent_sentiment_data = (
+                self.sentiment_history[-1]
+                if self.sentiment_history
+                else {
+                    "score": 0,
+                    "total_sentiment": 0,
+                    "positive_articles": 0,
+                    "negative_articles": 0,
+                    "neutral_articles": 0,
+                    "article_count": 0,
+                }
+            )
+            
+            # Get recent trades directly from trade_history
+            recent_trades = list(self.trade_history[-5:]) if self.trade_history else []
+            
+            # Build the data dict directly with current state
+            data = {
+                "current_price": current_price,
+                "portfolio_value": portfolio_value,
+                "cash_balance": self.current_capital,
+                "holdings": self.holdings,
+                "holdings_value": self.holdings * current_price,
+                "initial_capital": self.initial_capital,
+                "profit_loss": profit_loss,
+                "profit_loss_pct": profit_loss_pct,
+                "coin_symbol": self.coin_symbol,
+                "sentiment_score": float(recent_sentiment_data.get("score", 0)),
+                "total_sentiment": float(recent_sentiment_data.get("total_sentiment", 0)),
+                "avg_sentiment": float(recent_sentiment_data.get("score", 0)),
+                "position_size": self.max_position_size,
+                "recent_trades": recent_trades,
+                "total_trades": len(self.trade_history),
+                "buy_threshold": self.buy_threshold,
+                "sell_threshold": self.sell_threshold,
+                "positive_articles": recent_sentiment_data.get("positive_articles", 0),
+                "negative_articles": recent_sentiment_data.get("negative_articles", 0),
+                "neutral_articles": recent_sentiment_data.get("neutral_articles", 0),
+                "article_count": recent_sentiment_data.get("article_count", 0),
+                "last_update": datetime.now().isoformat(),
+                "bot_status": "running"
+            }
+            
+            with open(self.bot_data_file, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.debug(f"Error saving bot data for web interface: {e}")
+
+    def _save_bot_data_for_web_interface_with_sentiment(self, total_sentiment, avg_sentiment, 
+                                                         pos_articles, neg_articles, neu_articles, article_count):
+        """
+        Save bot data to JSON file with explicit sentiment values (for immediate save after cycle)
+        This method builds the data dict directly to ensure we capture the latest state.
+        """
+        try:
+            current_price = self.get_current_price()
+            portfolio_value = self.calculate_portfolio_value()
+            profit_loss = portfolio_value - self.initial_capital
+            profit_loss_pct = (profit_loss / self.initial_capital) * 100 if self.initial_capital > 0 else 0
+            
+            # Get recent trades directly from trade_history
+            recent_trades = list(self.trade_history[-5:]) if self.trade_history else []
+            
+            # Build the data dict directly with current state
+            data = {
+                "current_price": current_price,
+                "portfolio_value": portfolio_value,
+                "cash_balance": self.current_capital,
+                "holdings": self.holdings,
+                "holdings_value": self.holdings * current_price,
+                "initial_capital": self.initial_capital,
+                "profit_loss": profit_loss,
+                "profit_loss_pct": profit_loss_pct,
+                "coin_symbol": self.coin_symbol,
+                "sentiment_score": float(avg_sentiment) if avg_sentiment is not None else 0.0,
+                "total_sentiment": float(total_sentiment) if total_sentiment is not None else 0.0,
+                "avg_sentiment": float(avg_sentiment) if avg_sentiment is not None else 0.0,
+                "position_size": self.max_position_size,
+                "recent_trades": recent_trades,
+                "total_trades": len(self.trade_history),
+                "buy_threshold": self.buy_threshold,
+                "sell_threshold": self.sell_threshold,
+                "positive_articles": int(pos_articles) if pos_articles is not None else 0,
+                "negative_articles": int(neg_articles) if neg_articles is not None else 0,
+                "neutral_articles": int(neu_articles) if neu_articles is not None else 0,
+                "article_count": int(article_count) if article_count is not None else 0,
+                "last_update": datetime.now().isoformat(),
+                "bot_status": "running"
+            }
+            
+            with open(self.bot_data_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.info(f"Saved bot data: Cash=${self.current_capital:.2f}, Holdings={self.holdings:.4f}, Trades={len(self.trade_history)}")
+        except Exception as e:
+            logger.error(f"Error saving bot data with sentiment: {e}")
+
+    def _save_bot_data_periodically(self):
+        """
+        Background thread to save bot data periodically
+        """
+        while True:
+            try:
+                self._save_bot_data_for_web_interface()
+                # Also save state periodically (less frequently)
+                self._save_bot_state()
+            except Exception as e:
+                logger.debug(f"Error in periodic bot data save: {e}")
+            time.sleep(5)  # Save every 5 seconds
+
+    def _start_data_saver(self):
+        """
+        Start background thread to save bot data for web interface
+        """
+        thread = threading.Thread(target=self._save_bot_data_periodically, daemon=True)
+        thread.start()
+        return thread
 
     def get_current_price(self):
         """
@@ -471,9 +691,11 @@ class NewsBasedTradingBot:
                 else 0.02
             )
 
-            # Adjust thresholds based on volatility
-            dynamic_buy_threshold = self.buy_threshold * (1 + volatility * 2)
-            dynamic_sell_threshold = self.sell_threshold * (1 + volatility * 2)
+            # Adjust thresholds based on volatility (less aggressive adjustment)
+            # Reduced multiplier from 2 to 0.5 to make volatility adjustment less aggressive
+            volatility_multiplier = 0.5
+            dynamic_buy_threshold = self.buy_threshold * (1 + volatility * volatility_multiplier)
+            dynamic_sell_threshold = self.sell_threshold * (1 + volatility * volatility_multiplier)
             logger.info(f"Volatility: {volatility:.4f}, Dynamic buy threshold: {dynamic_buy_threshold:.3f}, Dynamic sell threshold: {dynamic_sell_threshold:.3f}")
         else:
             dynamic_buy_threshold = self.buy_threshold
@@ -523,6 +745,8 @@ class NewsBasedTradingBot:
                 logger.info(
                     f"BUY executed: {coins_to_buy:.4f} {self.coin_symbol} at ${current_price:.4f}, spent ${trade_amount:.2f}"
                 )
+                # Save state after trade
+                self._save_bot_state()
                 return True
             else:
                 logger.info("Insufficient funds to execute BUY")
@@ -550,6 +774,8 @@ class NewsBasedTradingBot:
                 logger.info(
                     f"SELL executed: {coins_to_sell:.4f} {self.coin_symbol} at ${current_price:.4f}, received ${proceeds:.2f}"
                 )
+                # Save state after trade
+                self._save_bot_state()
                 return True
             else:
                 logger.info("No holdings to execute SELL")
@@ -603,6 +829,9 @@ class NewsBasedTradingBot:
         logger.info(
             f"Strategy optimized - Win rate: {win_rate:.2f}, Buy threshold: {self.buy_threshold:.3f}"
         )
+        
+        # Save state after optimization
+        self._save_bot_state()
 
     def get_interface_data(self):
         """
@@ -621,12 +850,20 @@ class NewsBasedTradingBot:
             if self.sentiment_history
             else {
                 "score": 0,
+                "total_sentiment": 0,
                 "positive_articles": 0,
                 "negative_articles": 0,
                 "neutral_articles": 0,
+                "article_count": 0,
             }
         )
-        recent_sentiment = recent_sentiment_data["score"]
+        recent_sentiment = recent_sentiment_data.get("score", 0)
+        total_sentiment = recent_sentiment_data.get("total_sentiment", 0)
+        # Use score as avg_sentiment, or calculate from total_sentiment if available
+        if total_sentiment != 0 and recent_sentiment_data.get("article_count", 0) > 0:
+            avg_sentiment = total_sentiment / recent_sentiment_data.get("article_count", 1)
+        else:
+            avg_sentiment = recent_sentiment
 
         # Get recent trades
         recent_trades = self.trade_history[-5:] if self.trade_history else []
@@ -642,15 +879,18 @@ class NewsBasedTradingBot:
             "profit_loss": profit_loss,
             "profit_loss_pct": profit_loss_pct,
             "coin_symbol": self.coin_symbol,
-            "sentiment_score": recent_sentiment,
+            "sentiment_score": float(recent_sentiment) if recent_sentiment is not None else 0.0,
+            "total_sentiment": float(total_sentiment) if total_sentiment is not None else 0.0,
+            "avg_sentiment": float(avg_sentiment) if avg_sentiment is not None else 0.0,
             "position_size": self.max_position_size,
             "recent_trades": recent_trades,
             "total_trades": len(self.trade_history),
             "buy_threshold": self.buy_threshold,
             "sell_threshold": self.sell_threshold,
-            "positive_articles": recent_sentiment_data["positive_articles"],
-            "negative_articles": recent_sentiment_data["negative_articles"],
-            "neutral_articles": recent_sentiment_data["neutral_articles"],
+            "positive_articles": recent_sentiment_data.get("positive_articles", 0),
+            "negative_articles": recent_sentiment_data.get("negative_articles", 0),
+            "neutral_articles": recent_sentiment_data.get("neutral_articles", 0),
+            "article_count": recent_sentiment_data.get("article_count", 0),
         }
 
         return interface_data
@@ -723,6 +963,8 @@ class NewsBasedTradingBot:
         total_sentiment, avg_sentiment, pos_articles, neg_articles, neu_articles = (
             self.analyze_news_sentiment()
         )
+        # Calculate article count from the breakdown
+        article_count = pos_articles + neg_articles + neu_articles
         logger.info(f"Total sentiment: {total_sentiment:.3f}, Average sentiment: {avg_sentiment:.3f}")
 
         # Generate trading signal using total_sentiment
@@ -741,8 +983,15 @@ class NewsBasedTradingBot:
         # Optimize strategy based on performance
         self.optimize_strategy()
 
-        # Print current status
-        self.print_interface()
+        # Save bot data for web interface immediately after cycle with latest sentiment
+        # Pass the current cycle's sentiment data to ensure we save the latest values
+        self._save_bot_data_for_web_interface_with_sentiment(
+            total_sentiment, avg_sentiment, pos_articles, neg_articles, neu_articles, article_count
+        )
+
+        # Print current status (only if interface is not auto-updating)
+        if not self.interface_running:
+            self.print_interface()
 
         return {
             "price": current_price,
@@ -757,13 +1006,25 @@ class NewsBasedTradingBot:
             },
         }
 
-    def run_continuous(self, interval_minutes=15):
+    def run_continuous(self, interval_minutes=15, auto_update_interface=False, interface_update_seconds=5):
         """
         Run the trading bot continuously at specified intervals
+        
+        Args:
+            interval_minutes: Minutes between trading cycles
+            auto_update_interface: If True, start auto-updating interface (terminal)
+            interface_update_seconds: Seconds between interface updates
         """
         logger.info(
             f"Starting continuous trading mode (checking every {interval_minutes} minutes)"
         )
+
+        # Start auto-updating interface if requested
+        if auto_update_interface:
+            logger.info(f"Starting auto-updating interface (updates every {interface_update_seconds} seconds)")
+            self.start_auto_updating_interface(update_interval_seconds=interface_update_seconds)
+            # Give interface time to initialize
+            time.sleep(1)
 
         while True:
             try:
@@ -772,6 +1033,7 @@ class NewsBasedTradingBot:
                 time.sleep(interval_minutes * 60)
             except KeyboardInterrupt:
                 logger.info("Bot stopped by user")
+                self.interface_running = False
                 break
             except Exception as e:
                 logger.error(f"Error in trading cycle: {str(e)}")
@@ -782,25 +1044,31 @@ def main():
     """
     Main function to run the news-based trading bot
     """
+    global bot_instance
     try:
         # Initialize the bot with 10,000 DOGE coins equivalent in USD
         bot = NewsBasedTradingBot(initial_capital=10000, coin_symbol="DOGE")
+        bot_instance = bot  # Set global instance for web server
 
         print("News-Based Crypto Trading Bot is starting...")
         print(
             "This bot uses world news feeds for sentiment analysis instead of Twitter."
         )
         print("Press Ctrl+C to stop the bot")
+        print("\nTo start the web interface, run: python3 web_interface_server.py")
 
         # Run a single cycle for testing
         bot.run_single_cycle()
 
         # Run continuously with 15-minute intervals
-        bot.run_continuous(interval_minutes=15)  # Run every 15 minutes
+        # auto_update_interface=False because we're using web interface instead
+        bot.run_continuous(interval_minutes=15, auto_update_interface=False)
 
     except Exception as e:
         logger.error(f"Error running News-Based Trading Bot: {str(e)}")
 
+# Global bot instance for web server access
+bot_instance = None
 
 if __name__ == "__main__":
     main()

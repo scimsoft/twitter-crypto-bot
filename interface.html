@@ -101,6 +101,13 @@
             background-color: #ecf0f1;
             border-radius: 5px;
         }
+        .auto-update-indicator {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        .auto-update-indicator::before {
+            content: "🔄 ";
+        }
         .chart-container {
             height: 300px;
             background-color: #f9f9f9;
@@ -121,9 +128,15 @@
         </div>
         
         <div class="status-bar">
-            <div>Status: <span id="status" class="neutral">IDLE</span></div>
-            <button class="refresh-btn" onclick="updateDashboard()">Refresh Data</button>
-            <div>Last Updated: <span id="last-updated">Never</span></div>
+            <div>
+                Status: <span id="status" class="neutral">IDLE</span><br>
+                <small id="status-message" style="color: #7f8c8d; font-size: 11px;"></small>
+            </div>
+            <button class="refresh-btn" onclick="updateDashboard()">Refresh Now</button>
+            <div>
+                <span class="auto-update-indicator">Auto-updating every 5s</span><br>
+                Last Updated: <span id="last-updated">Never</span>
+            </div>
         </div>
         
         <div class="dashboard">
@@ -160,7 +173,17 @@
             <div class="card">
                 <h3>🧠 Sentiment Score</h3>
                 <div class="metric neutral"><span id="sentiment-score">0.000</span></div>
-                <p>Sentiment analysis from social media</p>
+                <p>Total sentiment (used for thresholds) and average sentiment</p>
+            </div>
+            
+            <div class="card">
+                <h3>📰 Articles Analyzed</h3>
+                <div class="metric neutral">
+                    <span id="positive-articles">0</span>+ / 
+                    <span id="negative-articles">0</span>- / 
+                    <span id="neutral-articles">0</span>=
+                </div>
+                <p>News articles analyzed in current cycle</p>
             </div>
         </div>
         
@@ -207,131 +230,192 @@
     </div>
 
     <script>
-        // Mock data for demonstration
-        let mockData = {
-            current_price: 0.1523,
-            portfolio_value: 10234.56,
-            cash_balance: 3456.78,
-            holdings: 44532.1234,
-            holdings_value: 6789.01,
-            initial_capital: 10000,
-            profit_loss: 234.56,
-            profit_loss_pct: 2.35,
-            coin_symbol: "DOGE",
-            sentiment_score: 0.45,
-            position_size: 0.2,
-            recent_trades: [
-                {
-                    type: 'BUY',
-                    coins: 1234.5678,
-                    price: 0.1501,
-                    amount_usd: 185.31,
-                    timestamp: '2026-02-01T09:00:00',
-                    sentiment: 0.42
-                },
-                {
-                    type: 'SELL',
-                    coins: 567.8901,
-                    price: 0.1550,
-                    amount_usd: 88.02,
-                    timestamp: '2026-02-01T08:30:00',
-                    sentiment: -0.15
-                },
-                {
-                    type: 'BUY',
-                    coins: 2345.6789,
-                    price: 0.1490,
-                    amount_usd: 349.51,
-                    timestamp: '2026-02-01T08:00:00',
-                    sentiment: 0.38
+        const API_URL = '/api/data';
+        let updateInterval = null;
+
+        async function fetchBotData() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-            ],
-            total_trades: 15,
-            buy_threshold: 0.3,
-            sell_threshold: -0.2
-        };
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching bot data:', error);
+                return null;
+            }
+        }
 
         function updateDashboard() {
             document.getElementById('status').textContent = 'UPDATING';
             document.getElementById('status').className = 'neutral';
             
-            // In a real implementation, this would fetch data from the backend
-            setTimeout(() => {
-                // Update metrics
-                document.getElementById('portfolio-value').textContent = mockData.portfolio_value.toFixed(2);
-                document.getElementById('cash-balance').textContent = mockData.cash_balance.toFixed(2);
-                document.getElementById('holdings').textContent = mockData.holdings.toFixed(4);
-                document.getElementById('coin-symbol').textContent = mockData.coin_symbol;
-                document.getElementById('current-price').textContent = mockData.current_price.toFixed(6);
+            fetchBotData().then(data => {
+                if (!data) {
+                    document.getElementById('status').textContent = 'ERROR';
+                    document.getElementById('status').className = 'negative';
+                    document.getElementById('last-updated').textContent = 'Failed to fetch data';
+                    return;
+                }
+                
+                // Check bot status
+                const statusMsgEl = document.getElementById('status-message');
+                if (data.bot_status === "running") {
+                    document.getElementById('status').textContent = 'ACTIVE';
+                    document.getElementById('status').className = 'positive';
+                    statusMsgEl.textContent = 'Bot is running and updating';
+                } else if (data.bot_status === "stale") {
+                    document.getElementById('status').textContent = 'STALE DATA';
+                    document.getElementById('status').className = 'neutral';
+                    statusMsgEl.textContent = data.message || 'Bot data is outdated';
+                } else if (data.bot_status === "not_running") {
+                    document.getElementById('status').textContent = 'WAITING FOR BOT';
+                    document.getElementById('status').className = 'neutral';
+                    // Show message if available
+                    if (data.message) {
+                        statusMsgEl.textContent = data.message;
+                    } else {
+                        statusMsgEl.textContent = 'Start the trading bot to see live data';
+                    }
+                } else if (data.error) {
+                    document.getElementById('status').textContent = 'ERROR';
+                    document.getElementById('status').className = 'negative';
+                    statusMsgEl.textContent = data.error.substring(0, 50);
+                } else {
+                    // Default: assume running if we have data
+                    document.getElementById('status').textContent = 'ACTIVE';
+                    document.getElementById('status').className = 'positive';
+                    statusMsgEl.textContent = 'Bot is running and updating';
+                }
+                
+                // Update metrics (handle missing values gracefully)
+                document.getElementById('portfolio-value').textContent = (data.portfolio_value || 0).toFixed(2);
+                document.getElementById('cash-balance').textContent = (data.cash_balance || 0).toFixed(2);
+                document.getElementById('holdings').textContent = (data.holdings || 0).toFixed(4);
+                document.getElementById('coin-symbol').textContent = data.coin_symbol || 'DOGE';
+                document.getElementById('current-price').textContent = (data.current_price || 0).toFixed(6);
                 
                 // Update profit/loss
                 const profitLossEl = document.getElementById('profit-loss');
                 const profitLossPctEl = document.getElementById('profit-loss-pct');
                 
-                if (mockData.profit_loss >= 0) {
-                    profitLossEl.innerHTML = '<span class="positive">$' + mockData.profit_loss.toFixed(2) + ' (+' + mockData.profit_loss_pct.toFixed(2) + '%)</span>';
+                if (data.profit_loss >= 0) {
+                    profitLossEl.innerHTML = '<span class="positive">$' + data.profit_loss.toFixed(2) + ' (+' + data.profit_loss_pct.toFixed(2) + '%)</span>';
                 } else {
-                    profitLossEl.innerHTML = '<span class="negative">$' + mockData.profit_loss.toFixed(2) + ' (' + mockData.profit_loss_pct.toFixed(2) + '%)</span>';
+                    profitLossEl.innerHTML = '<span class="negative">$' + data.profit_loss.toFixed(2) + ' (' + data.profit_loss_pct.toFixed(2) + '%)</span>';
                 }
                 
-                profitLossPctEl.textContent = mockData.profit_loss_pct.toFixed(2);
+                profitLossPctEl.textContent = data.profit_loss_pct.toFixed(2);
                 
-                // Update sentiment
+                // Update sentiment (use total_sentiment if available, otherwise avg)
                 const sentimentEl = document.getElementById('sentiment-score');
-                if (mockData.sentiment_score > 0.3) {
-                    sentimentEl.parentElement.className = 'metric positive';
-                } else if (mockData.sentiment_score < -0.2) {
-                    sentimentEl.parentElement.className = 'metric negative';
+                
+                // Always update sentiment display - check for both total and avg
+                // Convert to numbers to ensure proper formatting
+                const totalSent = typeof data.total_sentiment === 'number' ? data.total_sentiment : parseFloat(data.total_sentiment) || 0;
+                const avgSent = typeof data.avg_sentiment === 'number' ? data.avg_sentiment : parseFloat(data.avg_sentiment) || 0;
+                
+                if (!isNaN(totalSent) && !isNaN(avgSent) && (totalSent !== 0 || avgSent !== 0)) {
+                    // Both values available - show both
+                    sentimentEl.textContent = `Total: ${totalSent.toFixed(3)} | Avg: ${avgSent.toFixed(3)}`;
+                } else if (!isNaN(totalSent) && totalSent !== 0) {
+                    // Only total available
+                    sentimentEl.textContent = `Total: ${totalSent.toFixed(3)}`;
+                } else if (!isNaN(avgSent) && avgSent !== 0) {
+                    // Only avg available
+                    sentimentEl.textContent = `Avg: ${avgSent.toFixed(3)}`;
+                } else if (data.sentiment_score !== undefined) {
+                    // Fallback to sentiment_score
+                    const score = typeof data.sentiment_score === 'number' ? data.sentiment_score : parseFloat(data.sentiment_score) || 0;
+                    sentimentEl.textContent = score.toFixed(3);
                 } else {
-                    sentimentEl.parentElement.className = 'metric neutral';
+                    // No sentiment data
+                    sentimentEl.textContent = '0.000';
                 }
-                sentimentEl.textContent = mockData.sentiment_score.toFixed(3);
+                
+                // Color code sentiment
+                if (data.total_sentiment !== undefined) {
+                    if (data.total_sentiment >= data.buy_threshold) {
+                        sentimentEl.parentElement.className = 'metric positive';
+                    } else if (data.total_sentiment <= data.sell_threshold) {
+                        sentimentEl.parentElement.className = 'metric negative';
+                    } else {
+                        sentimentEl.parentElement.className = 'metric neutral';
+                    }
+                } else {
+                    if (sentimentValue > 0.3) {
+                        sentimentEl.parentElement.className = 'metric positive';
+                    } else if (sentimentValue < -0.2) {
+                        sentimentEl.parentElement.className = 'metric negative';
+                    } else {
+                        sentimentEl.parentElement.className = 'metric neutral';
+                    }
+                }
                 
                 // Update parameters
-                document.getElementById('buy-threshold').textContent = mockData.buy_threshold.toFixed(3);
-                document.getElementById('sell-threshold').textContent = mockData.sell_threshold.toFixed(3);
-                document.getElementById('position-size').textContent = (mockData.position_size * 100).toFixed(0);
-                document.getElementById('total-trades').textContent = mockData.total_trades;
+                document.getElementById('buy-threshold').textContent = data.buy_threshold.toFixed(3);
+                document.getElementById('sell-threshold').textContent = data.sell_threshold.toFixed(3);
+                document.getElementById('position-size').textContent = (data.position_size * 100).toFixed(0);
+                document.getElementById('total-trades').textContent = data.total_trades;
+                
+                // Update article counts (always update, even if 0)
+                document.getElementById('positive-articles').textContent = data.positive_articles || 0;
+                document.getElementById('negative-articles').textContent = data.negative_articles || 0;
+                document.getElementById('neutral-articles').textContent = data.neutral_articles || 0;
                 
                 // Update trade history table
                 const tbody = document.getElementById('trade-history-body');
                 tbody.innerHTML = '';
                 
-                mockData.recent_trades.forEach(trade => {
-                    const row = document.createElement('tr');
-                    
-                    // Format time to show only HH:MM
-                    const time = new Date(trade.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    
-                    row.innerHTML = `
-                        <td>${time}</td>
-                        <td class="${trade.type.toLowerCase()}">${trade.type}</td>
-                        <td>${trade.coins.toFixed(4)}</td>
-                        <td>$${trade.price.toFixed(6)}</td>
-                        <td>$${trade.amount_usd.toFixed(2)}</td>
-                        <td>${trade.sentiment.toFixed(2)}</td>
-                    `;
-                    
-                    tbody.appendChild(row);
-                });
+                if (data.recent_trades && data.recent_trades.length > 0) {
+                    data.recent_trades.forEach(trade => {
+                        const row = document.createElement('tr');
+                        
+                        // Format time
+                        let timeStr = 'N/A';
+                        if (trade.timestamp) {
+                            try {
+                                const time = new Date(trade.timestamp);
+                                timeStr = time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                            } catch (e) {
+                                timeStr = trade.timestamp.substring(11, 19) || trade.timestamp;
+                            }
+                        }
+                        
+                        row.innerHTML = `
+                            <td>${timeStr}</td>
+                            <td class="${trade.type.toLowerCase()}">${trade.type}</td>
+                            <td>${trade.coins.toFixed(4)}</td>
+                            <td>$${trade.price.toFixed(6)}</td>
+                            <td>$${trade.amount_usd.toFixed(2)}</td>
+                            <td>${(trade.sentiment || 0).toFixed(2)}</td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No trades yet</td></tr>';
+                }
                 
-                // Update status and time
-                document.getElementById('status').textContent = 'ACTIVE';
-                document.getElementById('status').className = 'positive';
-                document.getElementById('last-updated').textContent = new Date().toLocaleString();
-                
-                // Simulate changing values for demo
-                mockData.current_price += (Math.random() - 0.5) * 0.01;
-                mockData.portfolio_value += (Math.random() - 0.5) * 10;
-                mockData.sentiment_score = (Math.random() - 0.5) * 2;
-            }, 1000);
+                // Update time (status already updated above)
+                const updateTime = data.last_update ? new Date(data.last_update).toLocaleString() : new Date().toLocaleString();
+                document.getElementById('last-updated').textContent = updateTime;
+            });
         }
 
         // Initialize dashboard on load
         window.onload = function() {
             updateDashboard();
-            // Auto-refresh every 30 seconds
-            setInterval(updateDashboard, 30000);
+            // Auto-refresh every 5 seconds
+            updateInterval = setInterval(updateDashboard, 5000);
+        };
+
+        // Clean up interval on page unload
+        window.onbeforeunload = function() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
         };
     </script>
 </body>

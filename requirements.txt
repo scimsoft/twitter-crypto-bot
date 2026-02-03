@@ -27,3 +27,7 @@ asyncio-mqtt>=0.11.0
 pytz>=2022.0
 schedule>=1.2.0
 cachetools>=5.2.0
+
+# Web interface
+flask>=2.3.0
+flask-cors>=4.0.0
