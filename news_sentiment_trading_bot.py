@@ -352,6 +352,9 @@ class NewsBasedTradingBot:
             # Get recent trades directly from trade_history
             recent_trades = list(self.trade_history[-5:]) if self.trade_history else []
             
+            # Calculate dynamic thresholds
+            dynamic_buy_threshold, dynamic_sell_threshold, volatility = self._calculate_dynamic_thresholds()
+            
             # Build the data dict directly with current state
             data = {
                 "current_price": current_price,
@@ -371,6 +374,9 @@ class NewsBasedTradingBot:
                 "total_trades": len(self.trade_history),
                 "buy_threshold": self.buy_threshold,
                 "sell_threshold": self.sell_threshold,
+                "dynamic_buy_threshold": dynamic_buy_threshold,
+                "dynamic_sell_threshold": dynamic_sell_threshold,
+                "volatility": volatility,
                 "positive_articles": recent_sentiment_data.get("positive_articles", 0),
                 "negative_articles": recent_sentiment_data.get("negative_articles", 0),
                 "neutral_articles": recent_sentiment_data.get("neutral_articles", 0),
@@ -399,6 +405,9 @@ class NewsBasedTradingBot:
             # Get recent trades directly from trade_history
             recent_trades = list(self.trade_history[-5:]) if self.trade_history else []
             
+            # Calculate dynamic thresholds
+            dynamic_buy_threshold, dynamic_sell_threshold, volatility = self._calculate_dynamic_thresholds()
+            
             # Build the data dict directly with current state
             data = {
                 "current_price": current_price,
@@ -418,6 +427,9 @@ class NewsBasedTradingBot:
                 "total_trades": len(self.trade_history),
                 "buy_threshold": self.buy_threshold,
                 "sell_threshold": self.sell_threshold,
+                "dynamic_buy_threshold": dynamic_buy_threshold,
+                "dynamic_sell_threshold": dynamic_sell_threshold,
+                "volatility": volatility,
                 "positive_articles": int(pos_articles) if pos_articles is not None else 0,
                 "negative_articles": int(neg_articles) if neg_articles is not None else 0,
                 "neutral_articles": int(neu_articles) if neu_articles is not None else 0,
@@ -459,9 +471,9 @@ class NewsBasedTradingBot:
         """
         # List of free APIs to try in order
         apis_to_try = [
-            self._get_price_coingecko,
-            self._get_price_coinpaprika,
-            self._get_price_crypto_compare,
+            #self._get_price_coingecko,
+            #self._get_price_coinpaprika,
+            #self._get_price_crypto_compare,
             self._get_price_binance,
         ]
 
@@ -681,25 +693,12 @@ class NewsBasedTradingBot:
         Generate trading signal based on total_sentiment (sum of all sentiment scores) and market conditions
         Uses total_sentiment instead of average sentiment for threshold comparison
         """
-        # Adjust thresholds based on market volatility
-        current_price = self.get_current_price()
-        if len(self.price_history) > 10:
-            prices = [p["price"] for p in list(self.price_history)[-10:]]
-            volatility = (
-                statistics.stdev(prices) / statistics.mean(prices)
-                if len(set(prices)) > 1
-                else 0.02
-            )
-
-            # Adjust thresholds based on volatility (less aggressive adjustment)
-            # Reduced multiplier from 2 to 0.5 to make volatility adjustment less aggressive
-            volatility_multiplier = 0.5
-            dynamic_buy_threshold = self.buy_threshold * (1 + volatility * volatility_multiplier)
-            dynamic_sell_threshold = self.sell_threshold * (1 + volatility * volatility_multiplier)
+        # Get dynamic thresholds based on volatility
+        dynamic_buy_threshold, dynamic_sell_threshold, volatility = self._calculate_dynamic_thresholds()
+        
+        if volatility > 0:
             logger.info(f"Volatility: {volatility:.4f}, Dynamic buy threshold: {dynamic_buy_threshold:.3f}, Dynamic sell threshold: {dynamic_sell_threshold:.3f}")
         else:
-            dynamic_buy_threshold = self.buy_threshold
-            dynamic_sell_threshold = self.sell_threshold
             logger.info(f"Using base thresholds - Buy: {dynamic_buy_threshold:.3f}, Sell: {dynamic_sell_threshold:.3f}")
 
         # Generate signal based on total_sentiment and thresholds
@@ -833,6 +832,25 @@ class NewsBasedTradingBot:
         # Save state after optimization
         self._save_bot_state()
 
+    def _calculate_dynamic_thresholds(self):
+        """
+        Calculate current dynamic thresholds based on volatility
+        Returns (dynamic_buy_threshold, dynamic_sell_threshold, volatility)
+        """
+        if len(self.price_history) > 10:
+            prices = [p["price"] for p in list(self.price_history)[-10:]]
+            volatility = (
+                statistics.stdev(prices) / statistics.mean(prices)
+                if len(set(prices)) > 1
+                else 0.02
+            )
+            volatility_multiplier = 0.5
+            dynamic_buy_threshold = self.buy_threshold * (1 + volatility * volatility_multiplier)
+            dynamic_sell_threshold = self.sell_threshold * (1 + volatility * volatility_multiplier)
+            return dynamic_buy_threshold, dynamic_sell_threshold, volatility
+        else:
+            return self.buy_threshold, self.sell_threshold, 0.0
+
     def get_interface_data(self):
         """
         Get data formatted for the trading interface
@@ -868,6 +886,9 @@ class NewsBasedTradingBot:
         # Get recent trades
         recent_trades = self.trade_history[-5:] if self.trade_history else []
 
+        # Calculate dynamic thresholds
+        dynamic_buy_threshold, dynamic_sell_threshold, volatility = self._calculate_dynamic_thresholds()
+
         # Format interface data
         interface_data = {
             "current_price": current_price,
@@ -887,6 +908,9 @@ class NewsBasedTradingBot:
             "total_trades": len(self.trade_history),
             "buy_threshold": self.buy_threshold,
             "sell_threshold": self.sell_threshold,
+            "dynamic_buy_threshold": dynamic_buy_threshold,
+            "dynamic_sell_threshold": dynamic_sell_threshold,
+            "volatility": volatility,
             "positive_articles": recent_sentiment_data.get("positive_articles", 0),
             "negative_articles": recent_sentiment_data.get("negative_articles", 0),
             "neutral_articles": recent_sentiment_data.get("neutral_articles", 0),

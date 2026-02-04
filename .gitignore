@@ -55,3 +55,6 @@ wheels/
 .env.dev
 .env.test
 nohup.out
+bot_data.json.old
+.gitignore
+bot_state.json.old

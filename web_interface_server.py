@@ -11,6 +11,7 @@ import os
 import sys
 import threading
 import time
+import logging
 from datetime import datetime
 
 # Add parent directory to path
@@ -152,6 +153,10 @@ def start_data_saver():
     return thread
 
 if __name__ == '__main__':
+    # Disable Flask/Werkzeug request logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    
     # Start background thread to save bot data
     start_data_saver()
     

@@ -210,12 +210,29 @@
             <h3>⚙️ Trading Parameters</h3>
             <div class="dashboard">
                 <div class="card">
-                    <h4>Buy Threshold</h4>
+                    <h4>Base Buy Threshold</h4>
                     <div class="metric neutral"><span id="buy-threshold">0.300</span></div>
+                    <small style="color: #7f8c8d;">Static threshold</small>
                 </div>
                 <div class="card">
-                    <h4>Sell Threshold</h4>
+                    <h4>Base Sell Threshold</h4>
                     <div class="metric neutral"><span id="sell-threshold">-0.200</span></div>
+                    <small style="color: #7f8c8d;">Static threshold</small>
+                </div>
+                <div class="card">
+                    <h4>Dynamic Buy Threshold</h4>
+                    <div class="metric neutral"><span id="dynamic-buy-threshold">0.300</span></div>
+                    <small style="color: #7f8c8d;">Adjusted for volatility</small>
+                </div>
+                <div class="card">
+                    <h4>Dynamic Sell Threshold</h4>
+                    <div class="metric neutral"><span id="dynamic-sell-threshold">-0.200</span></div>
+                    <small style="color: #7f8c8d;">Adjusted for volatility</small>
+                </div>
+                <div class="card">
+                    <h4>Volatility</h4>
+                    <div class="metric neutral"><span id="volatility">0.0000</span></div>
+                    <small style="color: #7f8c8d;">Market volatility</small>
                 </div>
                 <div class="card">
                     <h4>Max Position</h4>
@@ -354,10 +371,19 @@
                 }
                 
                 // Update parameters
-                document.getElementById('buy-threshold').textContent = data.buy_threshold.toFixed(3);
-                document.getElementById('sell-threshold').textContent = data.sell_threshold.toFixed(3);
-                document.getElementById('position-size').textContent = (data.position_size * 100).toFixed(0);
-                document.getElementById('total-trades').textContent = data.total_trades;
+                document.getElementById('buy-threshold').textContent = (data.buy_threshold || 0).toFixed(3);
+                document.getElementById('sell-threshold').textContent = (data.sell_threshold || 0).toFixed(3);
+                if (data.dynamic_buy_threshold !== undefined) {
+                    document.getElementById('dynamic-buy-threshold').textContent = data.dynamic_buy_threshold.toFixed(3);
+                }
+                if (data.dynamic_sell_threshold !== undefined) {
+                    document.getElementById('dynamic-sell-threshold').textContent = data.dynamic_sell_threshold.toFixed(3);
+                }
+                if (data.volatility !== undefined) {
+                    document.getElementById('volatility').textContent = data.volatility.toFixed(4);
+                }
+                document.getElementById('position-size').textContent = ((data.position_size || 0.2) * 100).toFixed(0);
+                document.getElementById('total-trades').textContent = data.total_trades || 0;
                 
                 // Update article counts (always update, even if 0)
                 document.getElementById('positive-articles').textContent = data.positive_articles || 0;
